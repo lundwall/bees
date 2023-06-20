@@ -10,7 +10,7 @@ def Bees_portrayal(agent):
         return
 
     if type(agent) is Bee:
-        return {"Shape": "resources/bee.jpg", "scale": 1, "Layer": 1, "nectar": agent.nectar}
+        return {"Shape": "resources/bee.jpg", "scale": 1, "Layer": 1, "nectar": agent.nectar, "dance": str(agent.state)}
 
     elif type(agent) is Flower:
         return {"Shape": "resources/flower.png", "scale": 1, "Layer": 1, "nectar": agent.nectar}

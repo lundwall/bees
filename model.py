@@ -18,12 +18,13 @@ class Garden(mesa.Model):
             env_creator = lambda config: environment.env()
             # register that way to make the environment under an rllib name
             register_env('environment', lambda config: PettingZooEnv(env_creator(config)))
-            self.algo = PPO.from_checkpoint("/Users/marclundwall/ray_results/PPO_environment_2023-06-16_18-39-226vfdqfj5/checkpoint_005001")
+            self.algo = PPO.from_checkpoint("/Users/marclundwall/ray_results/PPO_environment_2023-06-18_00-36-04ri4bdepw/checkpoint_004201")
+            self.schedule_bees = mesa.time.RandomActivation(self)
+        else:
+            self.schedule_bees = mesa.time.BaseScheduler(self)
 
         self.num_bees = N
         self.grid = mesa.space.HexGrid(width, height, False)
-        # self.schedule_bees = mesa.time.RandomActivation(self)
-        self.schedule_bees = mesa.time.BaseScheduler(self)
         self.schedule_flowers = mesa.time.BaseScheduler(self)
         self.running = True
         self.current_id = -1
@@ -37,11 +38,14 @@ class Garden(mesa.Model):
             self.grid.move_to_empty(bee)
 
         # Create hive
+        self.hive_locations = []
         for _ in range(3):
             hive = Hive(self.next_id(), self, (0, 0))
             self.grid.move_to_empty(hive)
+            self.hive_locations.append(hive.pos)
 
         # Create flowers
+        self.bouquet_locations = []
         for group_color in flower_colors:
             group_size = self.random.randint(0, 12)
             group_max_nectar = self.random.randint(5, 20)
@@ -50,6 +54,7 @@ class Garden(mesa.Model):
             self.grid.move_to_empty(flower)
             pot_flower_pos = self.grid.get_neighborhood(flower.pos, False, 3)
             possible = [pos for pos in pot_flower_pos if self.grid.is_cell_empty(pos)]
+            self.bouquet_locations.append(flower.pos)
             for pos in flower.random.sample(possible, min(group_size, len(possible))):
                 rest_of_flowers = Flower(self.next_id(), self, pos, group_color, group_max_nectar)
                 self.schedule_flowers.add(rest_of_flowers)
