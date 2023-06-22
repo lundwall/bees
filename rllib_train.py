@@ -1,11 +1,6 @@
 from ray.tune.registry import register_env
-from ray.rllib.algorithms import ppo
 from ray.rllib.algorithms.ppo import PPOConfig
-from ray.tune.logger import pretty_print
-from ray.tune.logger import DEFAULT_LOGGERS
 from ray import air, tune
-from ray.air import session
-from ray.air.integrations.wandb import setup_wandb
 from ray.air.integrations.wandb import WandbLoggerCallback
 # import the pettingzoo environment
 import environment
