@@ -26,8 +26,8 @@ register_env('environment', lambda config: PettingZooEnv(env_creator(config)))
 
 config = PPOConfig()
 config = config.training(
-    lr=tune.uniform(1e-3, 1e-7),
-    train_batch_size=tune.randint(1_000, 10_000)
+    lr=tune.grid_search([6e-4, 1e-4, 6e-5, 1e-5, 6e-6, 1e-6])
+    # train_batch_size=tune.randint(1_000, 10_000)
 )
 config = config.environment('environment')
 
@@ -42,7 +42,7 @@ else:
             callbacks=[WandbLoggerCallback(project="bees", api_key_file="~/.wandb_api_key", log_config=True)],
         ),
         tune_config=tune.TuneConfig(
-            num_samples=100,
+            num_samples=1,
         ),
         param_space=config.to_dict(),
     )
