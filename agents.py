@@ -32,7 +32,7 @@ class Bee(mesa.Agent):
         bee_flags = np.array([item for sublist in bee_flags for item in sublist])
         flower_nectar = np.array([item for sublist in flower_nectar for item in sublist])
         hives = np.array([item for sublist in hives for item in sublist])
-        
+
         return (self.nectar, bee_flags, flower_nectar, hives)
             
     def step(self, action=None):

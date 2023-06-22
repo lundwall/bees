@@ -21,9 +21,9 @@ def Bees_portrayal(agent):
     return {}
 
 
-canvas_element = CanvasHexGrid(Bees_portrayal, 50, 50, 600, 600)
+canvas_element = CanvasHexGrid(Bees_portrayal, 15, 15, 600, 600)
 
 server = ModularServer(
-    Garden, [canvas_element], "Bee Garden", model_params={"N": 25, "width": 50, "height": 50, "training": False}
+    Garden, [canvas_element], "Bee Garden", model_params={"N": 10, "width": 15, "height": 15, "num_hives": 1, "num_bouquets": 1, "training": False}
 )
 # server.launch()

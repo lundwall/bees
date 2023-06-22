@@ -53,7 +53,7 @@ class raw_env(AECEnv):
 
         These attributes should not be changed after initialization.
         """
-        self.possible_agents = [f"bee_{i}" for i in range(25)]
+        self.possible_agents = [f"bee_{i}" for i in range(10)]
 
         self.render_mode = render_mode
 
@@ -140,7 +140,7 @@ class raw_env(AECEnv):
         can be called without issues.
         Here it sets up the state dictionary which is used by step() and the observations dictionary which is used by step() and observe()
         """
-        self.model = Garden()
+        self.model = Garden(N=10, width=15, height=15, num_hives=1, num_bouquets=1, training=True)
         self.visualizer = TextGrid(self.model.grid, self.converter)
         self.agents = self.possible_agents[:]
         self.rewards = {agent: 0 for agent in self.agents}
@@ -193,12 +193,12 @@ class raw_env(AECEnv):
         next_nectar = bee.nectar
 
         # 0 < reward < 1
-        reward = abs(next_nectar - prev_nectar)/100.0
+        reward = abs(next_nectar - prev_nectar)/200.0
         if next_nectar == bee.MAX_NECTAR:
             distances = [(hive[0] - bee.pos[0])**2 + (hive[1] - bee.pos[1])**2 for hive in self.model.hive_locations]
             reward += 1.0/min(distances)
-        elif next_nectar < prev_nectar:
-            reward *= 10
+        # elif next_nectar < prev_nectar:
+        #     reward *= 10
         elif next_nectar < bee.MAX_NECTAR:
             distances = [(bouquet[0] - bee.pos[0])**2 + (bouquet[1] - bee.pos[1])**2 for bouquet in self.model.bouquet_locations]
             reward += 1.0/min(distances)

@@ -6,7 +6,7 @@ class Garden(mesa.Model):
     A model with some number of bees.
     """
 
-    def __init__(self, N: int = 25, width: int = 50, height: int = 50, training=True) -> None:
+    def __init__(self, N: int = 25, width: int = 50, height: int = 50, num_hives: int = 0, num_bouquets: int = 0, training=False) -> None:
         if not training:
             from ray.rllib.algorithms.ppo import PPO
             from ray.tune.registry import register_env
@@ -18,12 +18,14 @@ class Garden(mesa.Model):
             env_creator = lambda config: environment.env()
             # register that way to make the environment under an rllib name
             register_env('environment', lambda config: PettingZooEnv(env_creator(config)))
-            self.algo = PPO.from_checkpoint("/Users/marclundwall/ray_results/PPO_environment_2023-06-18_00-36-04ri4bdepw/checkpoint_004201")
+            self.algo = PPO.from_checkpoint("/Users/marclundwall/ray_results/PPO_environment_2023-06-21_11-57-30jhzn72c2/checkpoint_001001")
             self.schedule_bees = mesa.time.RandomActivation(self)
         else:
             self.schedule_bees = mesa.time.BaseScheduler(self)
 
         self.num_bees = N
+        self.num_bouquets = num_bouquets
+        self.num_hives = num_hives
         self.grid = mesa.space.HexGrid(width, height, False)
         self.schedule_flowers = mesa.time.BaseScheduler(self)
         self.running = True
@@ -39,14 +41,15 @@ class Garden(mesa.Model):
 
         # Create hive
         self.hive_locations = []
-        for _ in range(3):
+        for _ in range(self.num_hives):
             hive = Hive(self.next_id(), self, (0, 0))
             self.grid.move_to_empty(hive)
             self.hive_locations.append(hive.pos)
 
         # Create flowers
         self.bouquet_locations = []
-        for group_color in flower_colors:
+        for _ in range(self.num_bouquets):
+            group_color = self.random.choice(flower_colors)
             group_size = self.random.randint(0, 12)
             group_max_nectar = self.random.randint(5, 20)
             flower = Flower(self.next_id(), self, (0, 0), group_color, group_max_nectar)
