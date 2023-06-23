@@ -30,7 +30,7 @@ else:
     tuner = tune.Tuner(
         "PPO",
         run_config=air.RunConfig(
-            stop={"timesteps_total": 100_000},
+            stop={"timesteps_total": 1_000_000},
             callbacks=[WandbLoggerCallback(project="bees", api_key_file="~/.wandb_api_key", log_config=True)],
             # checkpoint_config=air.CheckpointConfig(
             #     checkpoint_freq=100,
