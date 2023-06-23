@@ -1,5 +1,5 @@
 import mesa
-from honey.agents import Bee, Hive, Flower
+from agents import Bee, Hive, Flower
 
 class Garden(mesa.Model):
     """
@@ -11,17 +11,16 @@ class Garden(mesa.Model):
             from ray.rllib.algorithms.ppo import PPO
             from ray.tune.registry import register_env
             # import the pettingzoo environment
-            import honey.environment as environment
+            import environment as environment
             # import rllib pettingzoo interface
             from ray.rllib.env import PettingZooEnv
             # define how to make the environment. This way takes an optional environment config
             env_creator = lambda config: environment.env()
             # register that way to make the environment under an rllib name
             register_env('environment', lambda config: PettingZooEnv(env_creator(config)))
-            self.algo = PPO.from_checkpoint("/Users/marclundwall/ray_results/PPO_7h/PPO_environment_e9c09_00000_0_2023-06-22_23-51-55/checkpoint_002500")
-            self.schedule_bees = mesa.time.RandomActivation(self)
-        else:
-            self.schedule_bees = mesa.time.BaseScheduler(self)
+            self.algo = PPO.from_checkpoint("/Users/marclundwall/ray_results/PPO_masking/PPO_environment_74eff_00000_0_2023-06-23_15-33-32/checkpoint_000025")
+
+        self.schedule_bees = mesa.time.BaseScheduler(self)
 
         self.num_bees = N
         self.num_bouquets = num_bouquets

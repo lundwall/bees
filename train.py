@@ -1,15 +1,16 @@
 import ray
 from ray.tune.registry import register_env
 from ray.rllib.algorithms.ppo import PPOConfig
+from action_mask_model import TorchActionMaskModel
 from ray import air, tune
 from ray.air.integrations.wandb import WandbLoggerCallback
 # import the pettingzoo environment
-import honey.environment as environment
+import environment as environment
 # import rllib pettingzoo interface
 from pettingzoo_env import PettingZooEnv
 
 # Limit number of cores
-ray.init(num_cpus=16)
+# ray.init(num_cpus=16)
 
 # define how to make the environment. This way takes an optional environment config
 env_creator = lambda config: environment.env()
@@ -18,8 +19,12 @@ register_env('environment', lambda config: PettingZooEnv(env_creator(config)))
 
 config = PPOConfig()
 config = config.training(
-    lr=tune.grid_search([i*1e-7 for i in range (1, 102, 10)]),
-    train_batch_size=tune.grid_search(list(range (1000, 11_001, 2000))),
+    model={
+        "custom_model": TorchActionMaskModel,
+    },
+    # lr=tune.grid_search([i*1e-7 for i in range (1, 102, 10)]),
+    # lr=tune.grid_search([i*1e-6 for i in range(1, 20)]),
+    # train_batch_size=tune.grid_search(list(range(1000, 11_001, 2000))),
 )
 config = config.environment('environment')
 
@@ -30,7 +35,7 @@ else:
     tuner = tune.Tuner(
         "PPO",
         run_config=air.RunConfig(
-            stop={"timesteps_total": 1_000_000},
+            stop={"timesteps_total": 10_000},
             callbacks=[WandbLoggerCallback(project="bees", api_key_file="~/.wandb_api_key", log_config=True)],
             # checkpoint_config=air.CheckpointConfig(
             #     checkpoint_freq=100,

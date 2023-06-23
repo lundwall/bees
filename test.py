@@ -1,4 +1,4 @@
-import honey.environment as environment
+import environment as environment
 from pettingzoo.test import api_test
 
 env = environment.env(render_mode="human")

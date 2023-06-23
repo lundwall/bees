@@ -1,5 +1,5 @@
-from honey.agents import Bee, Hive, Flower
-from honey.model import Garden
+from agents import Bee, Hive, Flower
+from model import Garden
 from visualization.TextVisualization import TextGrid
 
 import functools
@@ -79,7 +79,7 @@ class raw_env(AECEnv):
         hive = Box(0, 1, shape=(81,), dtype=np.uint8)
         observation = Tuple((nectar, bee_flags, flower_nectar, hive))
         action_mask = Box(0, 1, shape=(6,), dtype=np.int8)
-        return Dict({'observation': observation, 'action_mask': action_mask})
+        return Dict({'observations': observation, 'action_mask': action_mask})
 
     # Action space should be defined here.
     # If your spaces change over time, remove this line (disable caching).
