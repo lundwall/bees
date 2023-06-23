@@ -27,7 +27,7 @@ echo "Starting on:     $(date)"
 echo "SLURM_JOB_ID:    ${SLURM_JOB_ID}"
 
 # Binary or script to execute
-/itet-stor/mlundwall/net_scratch/conda_envs/bees/bin/python /home/mlundwall/bees/rllib_train.py
+/itet-stor/mlundwall/net_scratch/conda_envs/bees/bin/python /home/mlundwall/bees/train_honey.py
 
 # Send more noteworthy information to the output log
 echo "Finished at:     $(date)"
