@@ -24,7 +24,7 @@ GitPython==3.1.31
 google-auth==2.20.0
 google-auth-oauthlib==1.0.0
 grpcio==1.49.1
-Gymnasium==0.26.3
+Gymnasium==0.28.0
 gymnasium-notices==0.0.1
 idna==3.4
 imageio==2.31.1
