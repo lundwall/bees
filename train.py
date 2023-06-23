@@ -10,7 +10,7 @@ import environment as environment
 from pettingzoo_env import PettingZooEnv
 
 # Limit number of cores
-# ray.init(num_cpus=16)
+ray.init(num_cpus=16)
 
 # define how to make the environment. This way takes an optional environment config
 env_creator = lambda config: environment.env()
