@@ -9,7 +9,7 @@ import honey.environment as environment
 from pettingzoo_env import PettingZooEnv
 
 # Limit number of cores
-# ray.init(num_cpus=10, num_gpus=1)
+ray.init(num_cpus=16)
 
 # define how to make the environment. This way takes an optional environment config
 env_creator = lambda config: environment.env()
@@ -30,7 +30,7 @@ else:
     tuner = tune.Tuner(
         "PPO",
         run_config=air.RunConfig(
-            stop={"timesteps_total": 100_000},
+            stop={"timesteps_total": 1_000_000},
             callbacks=[WandbLoggerCallback(project="bees", api_key_file="~/.wandb_api_key", log_config=True)],
             # checkpoint_config=air.CheckpointConfig(
             #     checkpoint_freq=100,
