@@ -19,7 +19,7 @@ register_env('environment', lambda config: PettingZooEnv(env_creator(config)))
 config = PPOConfig()
 config = config.training(
     lr=tune.grid_search([i*1e-7 for i in range (1, 102, 10)]),
-    train_batch_size=tune.grid_search([list(range (1000, 11_001, 2000))]),
+    train_batch_size=tune.grid_search(list(range (1000, 11_001, 2000))),
 )
 config = config.environment('environment')
 
