@@ -22,9 +22,8 @@ config = config.training(
     model={
         "custom_model": TorchActionMaskModel,
     },
-    # lr=tune.grid_search([i*1e-7 for i in range (1, 102, 10)]),
-    # lr=tune.grid_search([i*1e-6 for i in range(1, 20)]),
-    # train_batch_size=tune.grid_search(list(range(1000, 11_001, 2000))),
+    lr=tune.grid_search([i * 1e-5 for i in range(1, 11, 2)]),
+    train_batch_size=tune.grid_search(list(range(1000, 11_001, 2000))),
 )
 config = config.environment('environment')
 
@@ -35,7 +34,7 @@ else:
     tuner = tune.Tuner(
         "PPO",
         run_config=air.RunConfig(
-            stop={"timesteps_total": 10_000},
+            stop={"timesteps_total": 1_000_000},
             callbacks=[WandbLoggerCallback(project="bees", api_key_file="~/.wandb_api_key", log_config=True)],
             # checkpoint_config=air.CheckpointConfig(
             #     checkpoint_freq=100,
