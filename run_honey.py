@@ -1,3 +1,3 @@
-from server import server
+from honey.server import server
 
 server.launch(open_browser=True)

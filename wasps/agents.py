@@ -5,6 +5,22 @@ class Bee(mesa.Agent):
 
     MAX_NECTAR = 100
     VISION = 3
+    even_x_diffs = {
+        0: (0, 1),
+        1: (1, 1),
+        2: (1, 0),
+        3: (0, -1),
+        4: (-1, 0),
+        5: (-1, 1)
+    }
+    odd_x_diffs = {
+        0: (0, 1),
+        1: (1, 0),
+        2: (1, -1),
+        3: (0, -1),
+        4: (-1, -1),
+        5: (-1, 0)
+    }
 
     def __init__(self, unique_id, model, pos):
         super().__init__(unique_id, model)
@@ -23,9 +39,11 @@ class Bee(mesa.Agent):
                 agent = agents[0]
                 agent_pos = (agent.pos[0] - self.pos[0] + 4, agent.pos[1] - self.pos[1] + 4)
                 if type(agent) is Flower:
-                    flower_nectar[agent_pos[0]][agent_pos[1]] = agent.nectar
+                    # flower_nectar[agent_pos[0]][agent_pos[1]] = agent.nectar
+                    flower_nectar[agent_pos[0]][agent_pos[1]] = 1
                 elif type(agent) is Bee:
-                    bee_flags[agent_pos[0]][agent_pos[1]] = int.from_bytes(bytes(agent.state), 'big')
+                    # bee_flags[agent_pos[0]][agent_pos[1]] = int.from_bytes(bytes(agent.state), 'big')
+                    bee_flags[agent_pos[0]][agent_pos[1]] = 1
                 elif type(agent) is Hive:
                     hives[agent_pos[0]][agent_pos[1]] = 1
         
@@ -33,17 +51,28 @@ class Bee(mesa.Agent):
         flower_nectar = np.array([item for sublist in flower_nectar for item in sublist])
         hives = np.array([item for sublist in hives for item in sublist])
 
-        return (self.nectar, bee_flags, flower_nectar, hives)
+        action_mask = np.ones(6, dtype=np.int8)
+        if self.pos[0] % 2 == 0:
+            diffs = self.even_x_diffs
+        else:
+            diffs = self.odd_x_diffs
+        for dir, offsets in diffs.items():
+            dir_pos = (self.pos[0] + offsets[0], self.pos[1] + offsets[1])
+            if self.model.grid.out_of_bounds(dir_pos) or not self.model.grid.is_cell_empty(dir_pos):
+                action_mask[dir] = 0
+
+        return {"action_mask": action_mask, "observation": (self.nectar, bee_flags, flower_nectar, hives)}
             
     def step(self, action=None):
         if action == None:
             obs = self.observe()
             action = self.model.algo.compute_single_action(obs)
 
-        move_direction, new_state = action
-        if new_state >= 0 and new_state <= 16_777_215:
-            new_state = [(new_state >> 16) & 0xff, (new_state >> 8) & 0xff, (new_state) & 0xff]
-            self.state = new_state.copy()
+        # move_direction, new_state = action
+        # if new_state >= 0 and new_state <= 16_777_215:
+        #     new_state = [(new_state >> 16) & 0xff, (new_state >> 8) & 0xff, (new_state) & 0xff]
+        #     self.state = new_state.copy()
+        move_direction = action
 
         # Always: (0,-), (0,+)
         # When x is even: (-,+), (-,0), (+,+), (+,0)

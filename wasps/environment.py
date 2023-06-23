@@ -1,12 +1,12 @@
-from agents import Bee, Hive, Flower
-from model import Garden
+from honey.agents import Bee, Hive, Flower
+from honey.model import Garden
 from visualization.TextVisualization import TextGrid
 
 import functools
 
 import gymnasium
 import numpy as np
-from gymnasium.spaces import Discrete, Box, Tuple, Sequence
+from gymnasium.spaces import Discrete, Box, Tuple, Dict
 
 from pettingzoo import AECEnv
 from pettingzoo.utils import agent_selector, wrappers
@@ -67,18 +67,27 @@ class raw_env(AECEnv):
         # bee_flags = Box(0, 16_777_215, shape=(121,), dtype=np.uint32)
         # flower_nectar = Box(0, 99, shape=(121,), dtype=np.uint8)
         # hive = Box(0, 1, shape=(121,), dtype=np.uint8)
+
+        # nectar = Discrete(101)
+        # bee_flags = Box(0, 255, shape=(81,), dtype=np.uint8)
+        # flower_nectar = Box(0, 100, shape=(81,), dtype=np.uint8)
+        # hive = Box(0, 255, shape=(81,), dtype=np.uint8)
+        # return Tuple((nectar, bee_flags, flower_nectar, hive))
         nectar = Discrete(101)
-        bee_flags = Box(0, 255, shape=(81,), dtype=np.uint8)
-        flower_nectar = Box(0, 100, shape=(81,), dtype=np.uint8)
-        hive = Box(0, 255, shape=(81,), dtype=np.uint8)
-        return Tuple((nectar, bee_flags, flower_nectar, hive))
+        bee_flags = Box(0, 1, shape=(81,), dtype=np.uint8)
+        flower_nectar = Box(0, 1, shape=(81,), dtype=np.uint8)
+        hive = Box(0, 1, shape=(81,), dtype=np.uint8)
+        observation = Tuple((nectar, bee_flags, flower_nectar, hive))
+        action_mask = Box(0, 1, shape=(6,), dtype=np.int8)
+        return Dict({'observation': observation, 'action_mask': action_mask})
 
     # Action space should be defined here.
     # If your spaces change over time, remove this line (disable caching).
     @functools.lru_cache(maxsize=None)
     def action_space(self, agent):
         # return Tuple((Discrete(6), Discrete(16_777_216)))
-        return Tuple((Discrete(6), Discrete(256)))
+        # return Tuple((Discrete(6), Discrete(256)))
+        return Discrete(6)
 
     def converter(self, cell_agent):
         if type(cell_agent) is Bee:
@@ -196,14 +205,18 @@ class raw_env(AECEnv):
         reward = abs(next_nectar - prev_nectar)/200.0
         if next_nectar == bee.MAX_NECTAR:
             distances = [(hive[0] - bee.pos[0])**2 + (hive[1] - bee.pos[1])**2 for hive in self.model.hive_locations]
-            closest = min(distances) + 0.01
-            reward += 1.0/closest
+            visible_distances = [d for d in distances if d <= 18]
+            if len(visible_distances) != 0:
+                closest = min(visible_distances) + 0.01
+                reward += 1.0/closest
         # elif next_nectar < prev_nectar:
         #     reward *= 10
         elif next_nectar < bee.MAX_NECTAR:
             distances = [(bouquet[0] - bee.pos[0])**2 + (bouquet[1] - bee.pos[1])**2 for bouquet in self.model.bouquet_locations]
-            closest = min(distances) + 0.01
-            reward += 1.0/closest
+            visible_distances = [d for d in distances if d <= 18]
+            if len(visible_distances) != 0:
+                closest = min(visible_distances) + 0.01
+                reward += 1.0/closest
         self.rewards[agent] = reward
 
         if self._agent_selector.is_last():

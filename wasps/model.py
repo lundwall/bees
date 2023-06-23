@@ -1,31 +1,30 @@
 import mesa
-from agents import Bee, Hive, Flower
+from honey.agents import Bee, Hive, Flower
 
 class Garden(mesa.Model):
     """
     A model with some number of bees.
     """
 
-    def __init__(self, N: int = 25, width: int = 50, height: int = 50, num_hives: int = 0, num_bouquets: int = 0, training=False) -> None:
+    def __init__(self, N: int = 25, width: int = 50, height: int = 50, num_wasps: int = 0, training=False) -> None:
         if not training:
             from ray.rllib.algorithms.ppo import PPO
             from ray.tune.registry import register_env
             # import the pettingzoo environment
-            import environment
+            import honey.environment as environment
             # import rllib pettingzoo interface
             from ray.rllib.env import PettingZooEnv
             # define how to make the environment. This way takes an optional environment config
             env_creator = lambda config: environment.env()
             # register that way to make the environment under an rllib name
             register_env('environment', lambda config: PettingZooEnv(env_creator(config)))
-            self.algo = PPO.from_checkpoint("/Users/marclundwall/ray_results/PPO_environment_2023-06-21_11-57-30jhzn72c2/checkpoint_001001")
+            self.algo = PPO.from_checkpoint("/Users/marclundwall/ray_results/PPO/PPO_environment_7d2ed_00000_0_2023-06-22_17-22-20/checkpoint_000250")
             self.schedule_bees = mesa.time.RandomActivation(self)
         else:
             self.schedule_bees = mesa.time.BaseScheduler(self)
 
         self.num_bees = N
-        self.num_bouquets = num_bouquets
-        self.num_hives = num_hives
+        self.num_wasps = num_wasps
         self.grid = mesa.space.HexGrid(width, height, False)
         self.schedule_flowers = mesa.time.BaseScheduler(self)
         self.running = True

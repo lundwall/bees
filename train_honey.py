@@ -3,7 +3,7 @@ from ray.rllib.algorithms.ppo import PPOConfig
 from ray import air, tune
 from ray.air.integrations.wandb import WandbLoggerCallback
 # import the pettingzoo environment
-import environment
+import honey.environment as environment
 # import rllib pettingzoo interface
 from pettingzoo_env import PettingZooEnv
 # define how to make the environment. This way takes an optional environment config
@@ -25,10 +25,10 @@ register_env('environment', lambda config: PettingZooEnv(env_creator(config)))
 #     # loggers=DEFAULT_LOGGERS + (WandbLoggerCallback, ))
 
 config = PPOConfig()
-config = config.training(
-    lr=tune.grid_search([6e-4, 1e-4, 6e-5, 1e-5, 6e-6, 1e-6])
-    # train_batch_size=tune.randint(1_000, 10_000)
-)
+# config = config.training(
+#     lr=tune.grid_search([6e-4, 1e-4, 6e-5, 1e-5, 6e-6, 1e-6]),
+#     train_batch_size=tune.grid_search(1_000, 10_000)
+# )
 config = config.environment('environment')
 
 saved_results = f"~/ray_results/PPO"

@@ -1,8 +1,8 @@
 from visualization.ModularVisualization import ModularServer
 from visualization.modules.HexGridVisualization import CanvasHexGrid
 
-from agents import Bee, Flower, Hive
-from model import Garden
+from honey.agents import Bee, Flower, Hive
+from honey.model import Garden
 
 
 def Bees_portrayal(agent):
