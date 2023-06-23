@@ -30,7 +30,7 @@ echo "SLURM_JOB_ID:    ${SLURM_JOB_ID}"
 # export WANDB_CONFIG_DIR=/itet-stor/mlundwall/net_scratch/wandb
 
 # Binary or script to execute
-/itet-stor/mlundwall/net_scratch/conda_envs/bees/bin/python /home/mlundwall/bees/train_honey.py
+/itet-stor/mlundwall/net_scratch/conda_envs/bees/bin/python /home/mlundwall/bees/train.py
 
 # Send more noteworthy information to the output log
 echo "Finished at:     $(date)"
