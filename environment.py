@@ -228,7 +228,7 @@ class raw_env(AECEnv):
                         best_d = d
                 closest = best_d + 0.01
                 reward += 1.0/closest
-        reward += 1.0/(10*total_diff)
+        reward += 1.0/(100*total_diff)
         if action == 0:
             reward -= 0.5
         self.rewards[agent] = reward
