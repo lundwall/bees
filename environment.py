@@ -6,7 +6,7 @@ import functools
 
 import gymnasium
 import numpy as np
-from gymnasium.spaces import Discrete, Box, Tuple, Dict
+from gymnasium.spaces import Discrete, Box, Tuple, Dict, MultiDiscrete
 
 from pettingzoo import AECEnv
 from pettingzoo.utils import agent_selector, wrappers
@@ -73,12 +73,14 @@ class raw_env(AECEnv):
         # flower_nectar = Box(0, 100, shape=(81,), dtype=np.uint8)
         # hive = Box(0, 255, shape=(81,), dtype=np.uint8)
         # return Tuple((nectar, bee_flags, flower_nectar, hive))
-        nectar = Discrete(101)
-        bee_flags = Box(0, 1, shape=(81,), dtype=np.uint8)
-        flower_nectar = Box(0, 1, shape=(81,), dtype=np.uint8)
-        hive = Box(0, 1, shape=(81,), dtype=np.uint8)
-        observation = Tuple((nectar, bee_flags, flower_nectar, hive))
-        action_mask = Box(0, 1, shape=(6,), dtype=np.int8)
+        nectar = Discrete(2)
+        trace = MultiDiscrete([7, 7, 7])
+        # bee_flags = Box(0, 1, shape=(81,), dtype=np.uint8)
+        flower_nectar = Box(0, 20, shape=(49,), dtype=np.uint8)
+        hive = Box(0, 1, shape=(49,), dtype=np.uint8)
+        # observation = Tuple((nectar, bee_flags, flower_nectar, hive))
+        observation = Tuple((nectar, trace, flower_nectar, hive))
+        action_mask = Box(0, 1, shape=(7,), dtype=np.int8)
         return Dict({'observations': observation, 'action_mask': action_mask})
 
     # Action space should be defined here.
@@ -87,7 +89,7 @@ class raw_env(AECEnv):
     def action_space(self, agent):
         # return Tuple((Discrete(6), Discrete(16_777_216)))
         # return Tuple((Discrete(6), Discrete(256)))
-        return Discrete(6)
+        return Discrete(7)
 
     def converter(self, cell_agent):
         if type(cell_agent) is Bee:
@@ -197,6 +199,10 @@ class raw_env(AECEnv):
         agent_id = int(agent.lstrip("bee_"))
         bee = self.model.schedule_bees._agents[agent_id]
 
+        # Get difference in direction before updating the trace
+        diffs = [min(abs(diff - action), 7 - abs(diff - action)) for diff in list(bee.trace)]
+        total_diff = sum(diffs)
+
         prev_nectar = bee.nectar
         bee.step(action)
         next_nectar = bee.nectar
@@ -212,11 +218,19 @@ class raw_env(AECEnv):
         # elif next_nectar < prev_nectar:
         #     reward *= 10
         elif next_nectar < bee.MAX_NECTAR:
-            distances = [(bouquet[0] - bee.pos[0])**2 + (bouquet[1] - bee.pos[1])**2 for bouquet in self.model.bouquet_locations]
-            visible_distances = [d for d in distances if d <= 18]
+            distances_nectar = [((flower.pos[0] - bee.pos[0])**2 + (flower.pos[1] - bee.pos[1])**2, flower.nectar) for flower in self.model.flowers]
+            visible_distances = [d for d in distances_nectar if d <= 18]
+            best_d = 0
+            best_n = 0
             if len(visible_distances) != 0:
-                closest = min(visible_distances) + 0.01
+                for d,n in visible_distances:
+                    if n > best_n:
+                        best_d = d
+                closest = best_d + 0.01
                 reward += 1.0/closest
+        reward += 1.0/(10*total_diff)
+        if action == 0:
+            reward -= 0.5
         self.rewards[agent] = reward
 
         if self._agent_selector.is_last():
