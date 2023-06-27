@@ -74,15 +74,17 @@ class raw_env(AECEnv):
         # flower_nectar = Box(0, 100, shape=(81,), dtype=np.uint8)
         # hive = Box(0, 255, shape=(81,), dtype=np.uint8)
         # return Tuple((nectar, bee_flags, flower_nectar, hive))
-        nectar = Discrete(2)
-        trace = MultiDiscrete([7] * 10)
+        # nectar = Discrete(2)
+        # trace = MultiDiscrete([7] * 10)
         # bee_flags = Box(0, 1, shape=(81,), dtype=np.uint8)
         # hive = Box(0, 1, shape=(49,), dtype=np.uint8)
-        hive = Box(-50, 50, shape=(2,), dtype=np.int8)
-        flower = Box(-50, 50, shape=(2,), dtype=np.int8)
+        # hive = Box(-50, 50, shape=(2,), dtype=np.int8)
+        # flower = Box(-50, 50, shape=(2,), dtype=np.int8)
+        target_rel_pos = Box(-50, 50, shape=(2,), dtype=np.int8)
         flower_nectar = Box(0, 20, shape=(49,), dtype=np.uint8)
         # observation = Tuple((nectar, bee_flags, flower_nectar, hive))
-        observation = Tuple((nectar, trace, hive, flower, flower_nectar))
+        # observation = Tuple((nectar, trace, hive, flower, flower_nectar))
+        observation = Tuple((target_rel_pos, flower_nectar))
         action_mask = Box(0, 1, shape=(7,), dtype=np.int8)
         return Dict({'observations': observation, 'action_mask': action_mask})
 
@@ -154,7 +156,7 @@ class raw_env(AECEnv):
         can be called without issues.
         Here it sets up the state dictionary which is used by step() and the observations dictionary which is used by step() and observe()
         """
-        self.model = Garden(N=10, width=20, height=20, num_hives=1, num_bouquets=1, training=True, seed=49)
+        self.model = Garden(N=10, width=20, height=20, num_hives=1, num_bouquets=1, training=True)
         self.visualizer = TextGrid(self.model.grid, self.converter)
         self.agents = self.possible_agents[:]
         self.rewards = {agent: 0 for agent in self.agents}
@@ -227,12 +229,12 @@ class raw_env(AECEnv):
             next_hive_dist = bee.dist_to_rel_pos(bee.rel_pos["hive"])
 
         reward = abs(next_nectar - prev_nectar)/10.0
-        if next_nectar < bee.MAX_NECTAR:
-            if prev_flower_dist is not None and next_flower_dist is not None :
-                reward += prev_flower_dist - next_flower_dist
-        elif next_nectar == bee.MAX_NECTAR:
+        if next_nectar == bee.MAX_NECTAR:
             if prev_hive_dist is not None and next_hive_dist is not None :
                 reward += prev_hive_dist - next_hive_dist
+        else:
+            if prev_flower_dist is not None and next_flower_dist is not None :
+                reward += prev_flower_dist - next_flower_dist
         self.rewards[agent] = reward
 
         if self._agent_selector.is_last():

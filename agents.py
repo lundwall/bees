@@ -117,8 +117,14 @@ class Bee(mesa.Agent):
         hive_rel_pos = np.array(list(self.rel_pos["hive"]))
         flower_rel_pos = np.array(list(self.rel_pos["flower"]))
 
+        if self.nectar == self.MAX_NECTAR:
+            target_rel_pos = hive_rel_pos
+        else:
+            target_rel_pos = flower_rel_pos
+
         # return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, bee_flags, flower_nectar, hives), "action_mask": action_mask}
-        return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, trace, hive_rel_pos, flower_rel_pos, flower_nectar), "action_mask": action_mask}
+        # return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, trace, hive_rel_pos, flower_rel_pos, flower_nectar), "action_mask": action_mask}
+        return {"observations": (target_rel_pos, flower_nectar), "action_mask": action_mask}
             
     def step(self, action=None):
         if action == None:
