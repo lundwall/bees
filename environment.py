@@ -219,7 +219,7 @@ class raw_env(AECEnv):
         #     reward *= 10
         elif next_nectar < bee.MAX_NECTAR:
             distances_nectar = [((flower.pos[0] - bee.pos[0])**2 + (flower.pos[1] - bee.pos[1])**2, flower.nectar) for flower in self.model.flowers]
-            visible_distances = [d for d in distances_nectar if d <= 18]
+            visible_distances = [(d, n) for (d, n) in distances_nectar if d <= 18]
             best_d = 0
             best_n = 0
             if len(visible_distances) != 0:
@@ -228,9 +228,10 @@ class raw_env(AECEnv):
                         best_d = d
                 closest = best_d + 0.01
                 reward += 1.0/closest
-        reward += 1.0/(100*total_diff)
         if action == 0:
             reward -= 0.5
+        else:
+            reward += 1.0/(1000*(total_diff + 1))
         self.rewards[agent] = reward
 
         if self._agent_selector.is_last():

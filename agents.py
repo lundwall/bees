@@ -48,8 +48,7 @@ class Bee(mesa.Agent):
                 agent = agents[0]
                 agent_pos = (agent.pos[0] - self.pos[0] + 3, agent.pos[1] - self.pos[1] + 3)
                 if type(agent) is Flower:
-                    # flower_nectar[agent_pos[0]][agent_pos[1]] = agent.nectar
-                    flower_nectar[agent_pos[0]][agent_pos[1]] = 1
+                    flower_nectar[agent_pos[0]][agent_pos[1]] = agent.nectar
                 # elif type(agent) is Bee:
                 #     # bee_flags[agent_pos[0]][agent_pos[1]] = int.from_bytes(bytes(agent.state), 'big')
                 #     bee_flags[agent_pos[0]][agent_pos[1]] = 1
