@@ -141,7 +141,8 @@ class Bee(mesa.Agent):
             if (not self.model.grid.out_of_bounds(new_pos)) and self.model.grid.is_cell_empty(new_pos):
                 self.model.grid.move_agent(self, new_pos)
                 for type, rp in self.rel_pos.items():
-                    self.rel_pos[type] = self.sum_rel_pos(rp, (-diff_x, -diff_y))
+                    if rp != (0, 0):
+                        self.rel_pos[type] = self.sum_rel_pos(rp, (-diff_x, -diff_y))
 
         for agent in self.model.grid.iter_neighbors(self.pos, False, 1):
             self.interact_with(agent)
