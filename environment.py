@@ -12,7 +12,7 @@ from gymnasium.spaces import Discrete, Box, Tuple, Dict, MultiDiscrete
 from pettingzoo import AECEnv
 from pettingzoo.utils import agent_selector, wrappers
 
-MAX_ROUNDS = 200
+MAX_ROUNDS = 100
 
 def env(render_mode=None):
     """
