@@ -10,7 +10,7 @@ def Bees_portrayal(agent):
         return
 
     if type(agent) is Bee:
-        return {"Shape": "resources/bee.jpg", "scale": 1, "Layer": 1, "nectar": agent.nectar, "hive_pos": agent.rel_pos["hive"], "flower_pos": agent.rel_pos["flower"], "best_nectar": agent.best_flower_nectar}
+        return {"Shape": "resources/bee_transparent.png", "scale": 1, "Layer": 1, "nectar": agent.nectar, "hive_pos": agent.rel_pos["hive"], "flower_pos": agent.rel_pos["flower"], "best_nectar": agent.best_flower_nectar}
 
     elif type(agent) is Flower:
         return {"Shape": "resources/flower.png", "scale": 1, "Layer": 1, "nectar": agent.nectar}
@@ -24,9 +24,9 @@ def Bees_portrayal(agent):
     return {}
 
 
-canvas_element = CanvasHexGrid(Bees_portrayal, 15, 15, 600, 600)
+canvas_element = CanvasHexGrid(Bees_portrayal, 20, 20, 600, 600)
 
 server = ModularServer(
-    Garden, [canvas_element], "Bee Garden", model_params={"N": 10, "width": 15, "height": 15, "num_hives": 1, "num_bouquets": 1, "num_forests": 0, "training": False}
+    Garden, [canvas_element], "Bee Garden", model_params={"N": 10, "width": 20, "height": 20, "num_hives": 1, "num_bouquets": 1, "num_forests": 0, "training": False, "seed": 49}
 )
 # server.launch()

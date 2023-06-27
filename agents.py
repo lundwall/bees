@@ -90,7 +90,7 @@ class Bee(mesa.Agent):
                     # The other bee has found or heard about a hive
                     # Otherwise, its rel_pos["hive"] would be (0, 0)
                     if other_hive_rel_pos != agent_rel_pos:
-                        if self.dist_to_rel_pos(other_hive_rel_pos) < self.dist_to_rel_pos(self.rel_pos["hive"]):
+                        if self.rel_pos["hive"] == (0, 0) or self.dist_to_rel_pos(other_hive_rel_pos) < self.dist_to_rel_pos(self.rel_pos["hive"]):
                             self.rel_pos["hive"] = other_hive_rel_pos
                 elif type(agent) is Hive:
                     hives[agent_coor[0]][agent_coor[1]] = 1

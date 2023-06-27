@@ -12,7 +12,7 @@ from gymnasium.spaces import Discrete, Box, Tuple, Dict, MultiDiscrete
 from pettingzoo import AECEnv
 from pettingzoo.utils import agent_selector, wrappers
 
-MAX_ROUNDS = 500
+MAX_ROUNDS = 100
 
 def env(render_mode=None):
     """
@@ -154,7 +154,7 @@ class raw_env(AECEnv):
         can be called without issues.
         Here it sets up the state dictionary which is used by step() and the observations dictionary which is used by step() and observe()
         """
-        self.model = Garden(N=10, width=15, height=15, num_hives=1, num_bouquets=1, training=True)
+        self.model = Garden(N=10, width=20, height=20, num_hives=1, num_bouquets=1, training=True, seed=49)
         self.visualizer = TextGrid(self.model.grid, self.converter)
         self.agents = self.possible_agents[:]
         self.rewards = {agent: 0 for agent in self.agents}

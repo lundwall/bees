@@ -6,7 +6,8 @@ class Garden(mesa.Model):
     A model with some number of bees.
     """
 
-    def __init__(self, N: int = 25, width: int = 50, height: int = 50, num_hives: int = 0, num_bouquets: int = 0, num_forests: int = 0, num_wasps: int = 0, training = False) -> None:
+    def __init__(self, N: int = 25, width: int = 50, height: int = 50, num_hives: int = 0, num_bouquets: int = 0, num_forests: int = 0, num_wasps: int = 0, training = False, seed = None) -> None:
+        self.reset_randomizer(seed=seed)
         if not training:
             from ray.rllib.algorithms.ppo import PPO
             from ray.tune.registry import register_env
@@ -18,7 +19,7 @@ class Garden(mesa.Model):
             env_creator = lambda config: environment.env()
             # register that way to make the environment under an rllib name
             register_env('environment', lambda config: PettingZooEnv(env_creator(config)))
-            self.algo = PPO.from_checkpoint("/Users/marclundwall/ray_results/mem_5x/PPO_environment_d34c9_00003_3_2023-06-27_04-32-36/checkpoint_002000")
+            self.algo = PPO.from_checkpoint("/Users/marclundwall/ray_results/test/PPO_environment_d6a92_00000_0_2023-06-27_13-51-19/checkpoint_000010")
 
         self.schedule_bees = mesa.time.BaseScheduler(self)
 
