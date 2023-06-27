@@ -224,7 +224,7 @@ class raw_env(AECEnv):
             reward -= 0.5
         else:
             reward += 1.0/(1000*(total_diff + 1))
-        reward = 1/(1+math.exp(-reward))
+        reward = 1.0/(100*(1+math.exp(-reward)))
         self.rewards[agent] = reward
 
         if self._agent_selector.is_last():
