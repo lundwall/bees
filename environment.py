@@ -3,6 +3,7 @@ from model import Garden
 from visualization.TextVisualization import TextGrid
 
 import functools
+import math
 
 import gymnasium
 import numpy as np
@@ -210,17 +211,20 @@ class raw_env(AECEnv):
         next_nectar = bee.nectar
 
         # 0 < reward < 1
-        reward = abs(next_nectar - prev_nectar)/200.0
-        if next_nectar == bee.MAX_NECTAR:
-            dist = bee.dist_to_rel_pos(bee.rel_pos["hive"]) + 0.01
-            reward += 1.0/dist
-        elif next_nectar < bee.MAX_NECTAR:
-            dist = bee.dist_to_rel_pos(bee.rel_pos["flower"]) + 0.01
-            reward += 1.0/dist
+        reward = abs(next_nectar - prev_nectar)/10.0
+        if next_nectar < bee.MAX_NECTAR:
+            if bee.rel_pos["flower"] != (0, 0):
+                dist = bee.dist_to_rel_pos(bee.rel_pos["flower"]) + 0.01
+                reward += 1.0/dist
+        elif next_nectar == bee.MAX_NECTAR:
+            if bee.rel_pos["hive"] != (0, 0):
+                dist = bee.dist_to_rel_pos(bee.rel_pos["hive"]) + 0.01
+                reward += 1.0/dist
         if action == 0:
             reward -= 0.5
         else:
             reward += 1.0/(1000*(total_diff + 1))
+        reward = 1/(1+math.exp(-reward))
         self.rewards[agent] = reward
 
         if self._agent_selector.is_last():
