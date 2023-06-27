@@ -22,17 +22,17 @@ config = config.training(
     model={
         "custom_model": TorchActionMaskModel,
     },
-    # lr=5e-5,#tune.grid_search([i * 1e-5 for i in range(1, 11, 2)]),
-    # train_batch_size=5000,#tune.grid_search(list(range(1000, 11_001, 2000))),
+    #lr=tune.grid_search([i * 1e-5 for i in range(1, 11, 2)]),
+    #train_batch_size=tune.grid_search(list(range(1000, 11_001, 2000))),
 )
 config = config.environment('environment')
 
 tuner = tune.Tuner(
     "PPO",
     run_config=air.RunConfig(
-        name="trace",
-        #local_dir="/itet-stor/mlundwall/net_scratch/ray_results",
-        local_dir="/Users/marclundwall/ray_results",
+        name="trace_5x",
+        local_dir="/itet-stor/mlundwall/net_scratch/ray_results",
+        #local_dir="/Users/marclundwall/ray_results",
         stop={"timesteps_total": 10_000_000},
         callbacks=[WandbLoggerCallback(project="bees", api_key_file="~/.wandb_api_key", log_config=True)],
         checkpoint_config=air.CheckpointConfig(
@@ -40,7 +40,7 @@ tuner = tune.Tuner(
         ),
     ),
     tune_config=tune.TuneConfig(
-        num_samples=1,
+        num_samples=5,
     ),
     param_space=config.to_dict(),
 )
