@@ -18,7 +18,7 @@ class Garden(mesa.Model):
             env_creator = lambda config: environment.env()
             # register that way to make the environment under an rllib name
             register_env('environment', lambda config: PettingZooEnv(env_creator(config)))
-            self.algo = PPO.from_checkpoint("/Users/marclundwall/ray_results/lr7,tbs/PPO_environment_46059_00000_0_2023-06-25_12-02-16/checkpoint_000020")
+            self.algo = PPO.from_checkpoint("/Users/marclundwall/ray_results/trace/PPO_environment_b541c_00000_0_2023-06-26_01-48-35/checkpoint_001000")
 
         self.schedule_bees = mesa.time.BaseScheduler(self)
 
@@ -54,14 +54,14 @@ class Garden(mesa.Model):
             flower = Flower(self.next_id(), self, (0, 0), group_color, group_max_nectar)
             self.schedule_flowers.add(flower)
             self.grid.move_to_empty(flower)
-            self.flowers.append(flower.pos)
+            self.flowers.append(flower)
             pot_flower_pos = self.grid.get_neighborhood(flower.pos, False, 3)
             possible = [pos for pos in pot_flower_pos if self.grid.is_cell_empty(pos)]
             for pos in flower.random.sample(possible, min(group_size, len(possible))):
                 rest_of_flowers = Flower(self.next_id(), self, pos, group_color, group_max_nectar)
                 self.schedule_flowers.add(rest_of_flowers)
                 self.grid.place_agent(rest_of_flowers, pos)
-                self.flowers.append(flower.pos)
+                self.flowers.append(flower)
         
         # Create forest trees
         for _ in range(num_forests):

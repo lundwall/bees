@@ -74,12 +74,14 @@ class raw_env(AECEnv):
         # hive = Box(0, 255, shape=(81,), dtype=np.uint8)
         # return Tuple((nectar, bee_flags, flower_nectar, hive))
         nectar = Discrete(2)
-        trace = MultiDiscrete([7, 7, 7])
+        trace = MultiDiscrete([7] * 10)
         # bee_flags = Box(0, 1, shape=(81,), dtype=np.uint8)
+        # hive = Box(0, 1, shape=(49,), dtype=np.uint8)
+        hive = Box(-50, 50, shape=(2,), dtype=np.int8)
+        flower = Box(-50, 50, shape=(2,), dtype=np.int8)
         flower_nectar = Box(0, 20, shape=(49,), dtype=np.uint8)
-        hive = Box(0, 1, shape=(49,), dtype=np.uint8)
         # observation = Tuple((nectar, bee_flags, flower_nectar, hive))
-        observation = Tuple((nectar, trace, flower_nectar, hive))
+        observation = Tuple((nectar, trace, hive, flower, flower_nectar))
         action_mask = Box(0, 1, shape=(7,), dtype=np.int8)
         return Dict({'observations': observation, 'action_mask': action_mask})
 
@@ -197,7 +199,7 @@ class raw_env(AECEnv):
 
         agent = self.agent_selection
         agent_id = int(agent.lstrip("bee_"))
-        bee = self.model.schedule_bees._agents[agent_id]
+        bee: Bee = self.model.schedule_bees._agents[agent_id]
 
         # Get difference in direction before updating the trace
         diffs = [min(abs(diff - action), 7 - abs(diff - action)) for diff in list(bee.trace)]
@@ -210,27 +212,15 @@ class raw_env(AECEnv):
         # 0 < reward < 1
         reward = abs(next_nectar - prev_nectar)/200.0
         if next_nectar == bee.MAX_NECTAR:
-            distances = [(hive[0] - bee.pos[0])**2 + (hive[1] - bee.pos[1])**2 for hive in self.model.hive_locations]
-            visible_distances = [d for d in distances if d <= 18]
-            if len(visible_distances) != 0:
-                closest = min(visible_distances) + 0.01
-                reward += 1.0/closest
-        # elif next_nectar < prev_nectar:
-        #     reward *= 10
+            dist = bee.dist_to_rel_pos(bee.rel_pos["hive"]) + 0.01
+            reward += 1.0/dist
         elif next_nectar < bee.MAX_NECTAR:
-            distances_nectar = [((flower.pos[0] - bee.pos[0])**2 + (flower.pos[1] - bee.pos[1])**2, flower.nectar) for flower in self.model.flowers]
-            visible_distances = [d for d in distances_nectar if d <= 18]
-            best_d = 0
-            best_n = 0
-            if len(visible_distances) != 0:
-                for d,n in visible_distances:
-                    if n > best_n:
-                        best_d = d
-                closest = best_d + 0.01
-                reward += 1.0/closest
-        reward += 1.0/(100*total_diff)
+            dist = bee.dist_to_rel_pos(bee.rel_pos["flower"]) + 0.01
+            reward += 1.0/dist
         if action == 0:
             reward -= 0.5
+        else:
+            reward += 1.0/(1000*(total_diff + 1))
         self.rewards[agent] = reward
 
         if self._agent_selector.is_last():
