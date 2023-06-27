@@ -202,29 +202,37 @@ class raw_env(AECEnv):
         agent_id = int(agent.lstrip("bee_"))
         bee: Bee = self.model.schedule_bees._agents[agent_id]
 
-        # Get difference in direction before updating the trace
-        diffs = [min(abs(diff - action), 7 - abs(diff - action)) for diff in list(bee.trace)]
-        total_diff = sum(diffs)
+        # # Get difference in direction before updating the trace
+        # diffs = [min(abs(diff - action), 7 - abs(diff - action)) for diff in list(bee.trace)]
+        # total_diff = sum(diffs)
 
+        # Get previous state 'value'
         prev_nectar = bee.nectar
+        prev_flower_dist = None
+        if bee.rel_pos["flower"] != (0, 0):
+            prev_flower_dist = bee.dist_to_rel_pos(bee.rel_pos["flower"])
+        prev_hive_dist = None
+        if bee.rel_pos["hive"] != (0, 0):
+            prev_hive_dist = bee.dist_to_rel_pos(bee.rel_pos["hive"])
+        
         bee.step(action)
-        next_nectar = bee.nectar
 
-        # 0 < reward < 1
+        # Get next state 'value'
+        next_nectar = bee.nectar
+        next_flower_dist = None
+        if bee.rel_pos["flower"] != (0, 0):
+            next_flower_dist = bee.dist_to_rel_pos(bee.rel_pos["flower"])
+        prev_hive_dist = None
+        if bee.rel_pos["hive"] != (0, 0):
+            next_hive_dist = bee.dist_to_rel_pos(bee.rel_pos["hive"])
+
         reward = abs(next_nectar - prev_nectar)/10.0
         if next_nectar < bee.MAX_NECTAR:
-            if bee.rel_pos["flower"] != (0, 0):
-                dist = bee.dist_to_rel_pos(bee.rel_pos["flower"]) + 0.01
-                reward += 1.0/dist
+            if prev_flower_dist is not None and next_flower_dist is not None :
+                reward += prev_flower_dist - next_flower_dist
         elif next_nectar == bee.MAX_NECTAR:
-            if bee.rel_pos["hive"] != (0, 0):
-                dist = bee.dist_to_rel_pos(bee.rel_pos["hive"]) + 0.01
-                reward += 1.0/dist
-        if action == 0:
-            reward -= 0.5
-        else:
-            reward += 1.0/(1000*(total_diff + 1))
-        reward = 1.0/(100*(1+math.exp(-reward)))
+            if prev_hive_dist is not None and next_hive_dist is not None :
+                reward += prev_hive_dist - next_hive_dist
         self.rewards[agent] = reward
 
         if self._agent_selector.is_last():
