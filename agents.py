@@ -4,7 +4,7 @@ import numpy as np
 
 class Bee(mesa.Agent):
 
-    MAX_NECTAR = 100
+    MAX_NECTAR = 5
     VISION = 3
     TRACE_LENGTH = 3
 
@@ -35,7 +35,7 @@ class Bee(mesa.Agent):
         self.pos = pos
         self.nectar = 0
         self.state = [0] * 3
-        self.trace = deque([0] * 10)
+        self.trace = deque([0] * self.TRACE_LENGTH)
         self.rel_pos = {
             "hive": (0, 0),
             "flower": (0, 0),

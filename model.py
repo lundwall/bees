@@ -19,7 +19,7 @@ class Garden(mesa.Model):
             env_creator = lambda config: environment.env()
             # register that way to make the environment under an rllib name
             register_env('environment', lambda config: PettingZooEnv(env_creator(config)))
-            self.algo = PPO.from_checkpoint("/Users/marclundwall/ray_results/potential_test_5x/PPO_environment_00581_00004_4_2023-06-27_23-25-11/checkpoint_000100")
+            self.algo = PPO.from_checkpoint("/Users/marclundwall/ray_results/checkpoint_000300")
 
         self.schedule_bees = mesa.time.BaseScheduler(self)
 
@@ -31,7 +31,7 @@ class Garden(mesa.Model):
         self.running = True
         self.current_id = -1
 
-        flower_colors = ["blue", "red", "purple", "white", "pink"]
+        flower_colors = ["blue", "orange", "red", "pink"]
 
         # Create bees
         for _ in range(self.num_bees):
@@ -45,6 +45,11 @@ class Garden(mesa.Model):
             hive = Hive(self.next_id(), self, (0, 0))
             self.grid.move_to_empty(hive)
             self.hive_locations.append(hive.pos)
+            hive_rest_pos = self.grid.get_neighborhood(hive.pos, False, 1)
+            possible = [pos for pos in hive_rest_pos if self.grid.is_cell_empty(pos)]
+            for p in possible:
+                other_hive = Hive(self.next_id(), self, p)
+                self.grid.place_agent(other_hive, p)
 
         # Create flowers
         self.flowers = []
