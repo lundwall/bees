@@ -8,6 +8,7 @@ class Garden(mesa.Model):
 
     def __init__(self, N: int = 25, width: int = 50, height: int = 50, num_hives: int = 0, num_bouquets: int = 0, num_forests: int = 0, num_wasps: int = 0, training = False, seed = None) -> None:
         self.reset_randomizer(seed=seed)
+        self.training = training
         if not training:
             from ray.rllib.algorithms.ppo import PPO
             from ray.tune.registry import register_env

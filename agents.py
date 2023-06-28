@@ -34,6 +34,9 @@ class Bee(mesa.Agent):
         super().__init__(unique_id, model)
         self.pos = pos
         self.nectar = 0
+        # Sometimes make bee start with full nectar to help training to go towards hive
+        if self.model.training and self.model.random.randint(0, 1) == 0:
+            self.nectar = self.MAX_NECTAR
         self.state = [0] * 3
         self.trace = deque([0] * self.TRACE_LENGTH)
         self.rel_pos = {
