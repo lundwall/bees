@@ -20,7 +20,7 @@ class Garden(mesa.Model):
             env_creator = lambda config: environment.env()
             # register that way to make the environment under an rllib name
             register_env('environment', lambda config: PettingZooEnv(env_creator(config)))
-            self.algo = PPO.from_checkpoint("/Users/marclundwall/ray_results/checkpoint_000300")
+            self.algo = PPO.from_checkpoint("/Users/marclundwall/ray_results/checkpoint_000600")
 
         self.schedule_bees = mesa.time.BaseScheduler(self)
 

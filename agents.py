@@ -57,8 +57,8 @@ class Bee(mesa.Agent):
     def observe(self):
         # (nectar, bee flags, flower nectar, hive location)
         # bee_flags = [[0 for _ in range(7)] for _ in range(7)]
-        flower_nectar = [[0 for _ in range(7)] for _ in range(7)]
-        hives = [[0 for _ in range(7)] for _ in range(7)]
+        map = [[0 for _ in range(7)] for _ in range(7)]
+        # hives = [[0 for _ in range(7)] for _ in range(7)]
         for pos in self.model.grid.iter_neighborhood(self.pos, False, self.VISION):
             agents = self.model.grid.get_cell_list_contents([pos])
             if len(agents) != 0:
@@ -74,7 +74,7 @@ class Bee(mesa.Agent):
                         if self.dist_to_rel_pos(flower_rel_pos) < self.dist_to_rel_pos(self.rel_pos["flower"]):
                             self.best_flower_nectar = agent.nectar
                             self.rel_pos["flower"] = flower_rel_pos
-                    flower_nectar[agent_coor[0]][agent_coor[1]] = agent.nectar
+                    map[agent_coor[0]][agent_coor[1]] = agent.nectar
                 elif type(agent) is Bee:
                     agent_rel_pos = self.pos_to_rel_pos(agent.pos)
                     other_flower_rel_pos = self.sum_rel_pos(agent_rel_pos, agent.rel_pos["flower"])
@@ -96,13 +96,14 @@ class Bee(mesa.Agent):
                         if self.rel_pos["hive"] == (0, 0) or self.dist_to_rel_pos(other_hive_rel_pos) < self.dist_to_rel_pos(self.rel_pos["hive"]):
                             self.rel_pos["hive"] = other_hive_rel_pos
                 elif type(agent) is Hive:
-                    hives[agent_coor[0]][agent_coor[1]] = 1
+                    # hives[agent_coor[0]][agent_coor[1]] = 1
+                    map[agent_coor[0]][agent_coor[1]] = -1
                     hive_rel_pos = self.pos_to_rel_pos(agent.pos)
                     self.rel_pos["hive"] = hive_rel_pos
 
         # bee_flags = np.array([item for sublist in bee_flags for item in sublist])
-        flower_nectar = np.array([item for sublist in flower_nectar for item in sublist])
-        hives = np.array([item for sublist in hives for item in sublist])
+        map = np.array([item for sublist in map for item in sublist])
+        # hives = np.array([item for sublist in hives for item in sublist])
 
         action_mask = np.ones(7, dtype=np.int8)
         if self.pos[0] % 2 == 0:
@@ -126,7 +127,7 @@ class Bee(mesa.Agent):
             target_rel_pos = flower_rel_pos
 
         # return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, bee_flags, flower_nectar, hives), "action_mask": action_mask}
-        return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, hive_rel_pos, flower_rel_pos, flower_nectar, trace), "action_mask": action_mask}
+        return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, hive_rel_pos, flower_rel_pos, map, trace), "action_mask": action_mask}
         # return {"observations": (target_rel_pos, flower_nectar), "action_mask": action_mask}
             
     def step(self, action=None):
