@@ -81,7 +81,7 @@ class raw_env(AECEnv):
         hive = Box(-50, 50, shape=(2,), dtype=np.int8)
         flower = Box(-50, 50, shape=(2,), dtype=np.int8)
         # target_rel_pos = Box(-50, 50, shape=(2,), dtype=np.int8)
-        map = Box(-1, 20, shape=(49,), dtype=np.uint8)
+        map = Box(-1, 20, shape=(49,), dtype=np.int8)
         # observation = Tuple((nectar, bee_flags, flower_nectar, hive))
         # observation = Tuple((nectar, trace, hive, flower, flower_nectar))
         observation = Tuple((nectar, hive, flower, map, trace))
