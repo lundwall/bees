@@ -39,6 +39,7 @@ class Bee(mesa.Agent):
             self.nectar = self.MAX_NECTAR
         self.state = [0] * 3
         self.trace = deque([0] * self.TRACE_LENGTH)
+        self.trace_locs = deque([pos] * self.TRACE_LENGTH)
         self.rel_pos = {
             "hive": (0, 0),
             "flower": (0, 0),
@@ -97,9 +98,16 @@ class Bee(mesa.Agent):
                             self.rel_pos["hive"] = other_hive_rel_pos
                 elif type(agent) is Hive:
                     # hives[agent_coor[0]][agent_coor[1]] = 1
-                    map[agent_coor[0]][agent_coor[1]] = -1
+                    map[agent_coor[0]][agent_coor[1]] = -2
                     hive_rel_pos = self.pos_to_rel_pos(agent.pos)
                     self.rel_pos["hive"] = hive_rel_pos
+
+        # Add trace rel locs to map
+        for t in self.trace_locs:
+            rel_t = self.pos_to_rel_pos(t)
+            rel_t = (rel_t[0] + 3, rel_t[1] + 3)
+            if rel_t[0] >= 0 and rel_t[0] < 7 and rel_t[1] >= 0 and rel_t[1] < 7:
+                map[rel_t[0]][rel_t[1]] = -1
 
         # bee_flags = np.array([item for sublist in bee_flags for item in sublist])
         map = np.array([item for sublist in map for item in sublist])
@@ -127,7 +135,7 @@ class Bee(mesa.Agent):
             target_rel_pos = flower_rel_pos
 
         # return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, bee_flags, flower_nectar, hives), "action_mask": action_mask}
-        return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, hive_rel_pos, flower_rel_pos, map, trace), "action_mask": action_mask}
+        return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, hive_rel_pos, flower_rel_pos, map), "action_mask": action_mask}
         # return {"observations": (target_rel_pos, flower_nectar), "action_mask": action_mask}
             
     def step(self, action=None):
@@ -150,6 +158,8 @@ class Bee(mesa.Agent):
             new_pos = (self.pos[0] + diff_x, self.pos[1] + diff_y)
             if (not self.model.grid.out_of_bounds(new_pos)) and self.model.grid.is_cell_empty(new_pos):
                 self.model.grid.move_agent(self, new_pos)
+                self.trace_locs.append(new_pos)
+                self.trace_locs.popleft()
                 for type, rp in self.rel_pos.items():
                     if rp != (0, 0):
                         self.rel_pos[type] = self.sum_rel_pos(rp, (-diff_x, -diff_y))
