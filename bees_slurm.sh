@@ -2,7 +2,7 @@
 
 #SBATCH --output=%j.out     # where to store the output (%j is the JOBID), subdirectory "log" must exist
 #SBATCH --cpus-per-task=16
-#SBATCH --nodelist=arton[01-08]
+#SBATCH --exclude=artongpu01,tikgpu[01-10]
 
 # Exit on errors
 set -o errexit

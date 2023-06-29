@@ -6,7 +6,7 @@ class Bee(mesa.Agent):
 
     MAX_NECTAR = 5
     VISION = 3
-    TRACE_LENGTH = 3
+    TRACE_LENGTH = 10
 
     # Always: (0,-), (0,+)
     # When x is even: (-,+), (-,0), (+,+), (+,0)
@@ -126,7 +126,7 @@ class Bee(mesa.Agent):
             target_rel_pos = flower_rel_pos
 
         # return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, bee_flags, flower_nectar, hives), "action_mask": action_mask}
-        return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, hive_rel_pos, flower_rel_pos, flower_nectar), "action_mask": action_mask}
+        return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, hive_rel_pos, flower_rel_pos, flower_nectar, trace), "action_mask": action_mask}
         # return {"observations": (target_rel_pos, flower_nectar), "action_mask": action_mask}
             
     def step(self, action=None):
