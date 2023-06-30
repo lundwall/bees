@@ -41,7 +41,7 @@ hyperopt_search = HyperOptSearch(
 tuner = tune.Tuner(
     "PPO",
     run_config=air.RunConfig(
-        name="smaller",
+        name="wasps",
         local_dir="/itet-stor/mlundwall/net_scratch/ray_results",
         # local_dir="/Users/marclundwall/ray_results",
         stop={"training_iteration": 2000},
