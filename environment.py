@@ -157,7 +157,7 @@ class raw_env(AECEnv):
         can be called without issues.
         Here it sets up the state dictionary which is used by step() and the observations dictionary which is used by step() and observe()
         """
-        self.model = Garden(N=20, width=25, height=25, num_hives=1, num_bouquets=1, training=True)
+        self.model = Garden(N=10, width=20, height=20, num_hives=1, num_bouquets=1, training=True)
         self.visualizer = TextGrid(self.model.grid, self.converter)
         self.agents = self.possible_agents[:]
         self.rewards = {agent: 0 for agent in self.agents}
