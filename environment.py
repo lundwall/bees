@@ -81,7 +81,7 @@ class raw_env(AECEnv):
         hive = Box(-50, 50, shape=(2,), dtype=np.int8)
         flower = Box(-50, 50, shape=(2,), dtype=np.int8)
         # target_rel_pos = Box(-50, 50, shape=(2,), dtype=np.int8)
-        map = Box(-2, 20, shape=(49,), dtype=np.int8)
+        map = Box(-4, 20, shape=(49,), dtype=np.int8)
         # observation = Tuple((nectar, bee_flags, flower_nectar, hive))
         # observation = Tuple((nectar, trace, hive, flower, flower_nectar))
         observation = Tuple((nectar, hive, flower, map))
@@ -157,7 +157,7 @@ class raw_env(AECEnv):
         can be called without issues.
         Here it sets up the state dictionary which is used by step() and the observations dictionary which is used by step() and observe()
         """
-        self.model = Garden(N=10, width=20, height=20, num_hives=1, num_bouquets=1, training=True)
+        self.model = Garden(N=20, width=25, height=25, num_hives=1, num_bouquets=1, training=True)
         self.visualizer = TextGrid(self.model.grid, self.converter)
         self.agents = self.possible_agents[:]
         self.rewards = {agent: 0 for agent in self.agents}

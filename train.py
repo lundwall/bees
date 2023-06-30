@@ -1,6 +1,8 @@
 import ray
 from ray.tune.registry import register_env
 from ray.rllib.algorithms.ppo import PPOConfig
+from ray.tune.search.hyperopt import HyperOptSearch
+from ray.tune.schedulers import AsyncHyperBandScheduler
 from action_mask_model import TorchActionMaskModel
 from ray import air, tune
 from ray.air.integrations.wandb import WandbLoggerCallback
@@ -22,29 +24,46 @@ config = config.training(
     model={
         "custom_model": TorchActionMaskModel,
     },
-    #lr=tune.grid_search([i * 1e-5 for i in range(1, 11, 2)]),
-    #train_batch_size=tune.grid_search(list(range(1000, 11_001, 2000))),
+    lr=tune.uniform(1e-5, 1e-4),
+    train_batch_size=tune.randint(1_000, 10_000),
 )
+# config = config.rollouts(rollout_fragment_length=10)
 config = config.environment('environment')
+
+current_best_params = [
+    {"lr": 5e-5, "train_batch_size": 4000},
+]
+hyperopt_search = HyperOptSearch(
+            metric="episode_reward_mean", mode="max",
+            points_to_evaluate=current_best_params)
 
 tuner = tune.Tuner(
     "PPO",
     run_config=air.RunConfig(
-        name="trace_5x",
-        local_dir="/itet-stor/mlundwall/net_scratch/ray_results",
-        #local_dir="/Users/marclundwall/ray_results",
-        stop={"timesteps_total": 10_000_000},
+        name="tune",
+        # local_dir="/itet-stor/mlundwall/net_scratch/ray_results",
+        local_dir="/Users/marclundwall/ray_results",
+        # stop={"training_iteration": 50},
         callbacks=[WandbLoggerCallback(project="bees", api_key_file="~/.wandb_api_key", log_config=True)],
-        checkpoint_config=air.CheckpointConfig(
-            checkpoint_frequency=1000,
-        ),
+        # checkpoint_config=air.CheckpointConfig(
+        #     checkpoint_frequency=60,
+        # ),
     ),
     tune_config=tune.TuneConfig(
-        num_samples=5,
+        num_samples=100,
+        search_alg=hyperopt_search,
+        scheduler=AsyncHyperBandScheduler(
+            time_attr="training_iteration",
+            metric="episode_reward_mean",
+            mode="max",
+            max_t=100,
+            grace_period=5,
+        ),
     ),
     param_space=config.to_dict(),
 )
 results = tuner.fit()
+print("Best hyperparameters found were: ", results.get_best_result().config)
 
 # Train without tuning
 # algo = PPOConfig().environment('environment').build()

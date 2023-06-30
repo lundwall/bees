@@ -77,6 +77,7 @@ class Bee(mesa.Agent):
                             self.rel_pos["flower"] = flower_rel_pos
                     map[agent_coor[0]][agent_coor[1]] = agent.nectar
                 elif type(agent) is Bee:
+                    map[agent_coor[0]][agent_coor[1]] = -2
                     agent_rel_pos = self.pos_to_rel_pos(agent.pos)
                     other_flower_rel_pos = self.sum_rel_pos(agent_rel_pos, agent.rel_pos["flower"])
                     # The other bee has found or heard about a flower
@@ -98,7 +99,11 @@ class Bee(mesa.Agent):
                             self.rel_pos["hive"] = other_hive_rel_pos
                 elif type(agent) is Hive:
                     # hives[agent_coor[0]][agent_coor[1]] = 1
-                    map[agent_coor[0]][agent_coor[1]] = -2
+                    map[agent_coor[0]][agent_coor[1]] = -3
+                    hive_rel_pos = self.pos_to_rel_pos(agent.pos)
+                    self.rel_pos["hive"] = hive_rel_pos
+                elif type(agent) is Forest:
+                    map[agent_coor[0]][agent_coor[1]] = -4
                     hive_rel_pos = self.pos_to_rel_pos(agent.pos)
                     self.rel_pos["hive"] = hive_rel_pos
 
@@ -108,6 +113,24 @@ class Bee(mesa.Agent):
             rel_t = (rel_t[0] + 3, rel_t[1] + 3)
             if rel_t[0] >= 0 and rel_t[0] < 7 and rel_t[1] >= 0 and rel_t[1] < 7:
                 map[rel_t[0]][rel_t[1]] = -1
+
+        # Add edges of map
+        if self.pos[0] < 3:
+            for x in range(3 - self.pos[0]):
+                for y in range(7):
+                    map[x][y] = -4
+        if self.pos[0] > (self.model.grid.width-1) - 3:
+            for x in range((self.model.grid.width-1) - self.pos[0] + 4, 7):
+                for y in range(7):
+                    map[x][y] = -4
+        if self.pos[1] < 3:
+            for y in range(3 - self.pos[1]):
+                for x in range(7):
+                    map[x][y] = -4
+        if self.pos[1] > (self.model.grid.height-1) - 3:
+            for y in range((self.model.grid.height-1) - self.pos[1] + 4, 7):
+                for x in range(7):
+                    map[x][y] = -4
 
         # bee_flags = np.array([item for sublist in bee_flags for item in sublist])
         map = np.array([item for sublist in map for item in sublist])

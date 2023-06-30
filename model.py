@@ -7,7 +7,6 @@ class Garden(mesa.Model):
     """
 
     def __init__(self, N: int = 25, width: int = 50, height: int = 50, num_hives: int = 0, num_bouquets: int = 0, num_forests: int = 0, num_wasps: int = 0, training = False, seed = None) -> None:
-        self.reset_randomizer(seed=seed)
         self.training = training
         if not training:
             from ray.rllib.algorithms.ppo import PPO
@@ -20,7 +19,7 @@ class Garden(mesa.Model):
             env_creator = lambda config: environment.env()
             # register that way to make the environment under an rllib name
             register_env('environment', lambda config: PettingZooEnv(env_creator(config)))
-            self.algo = PPO.from_checkpoint("/Users/marclundwall/ray_results/checkpoint_000600")
+            self.algo = PPO.from_checkpoint("/Users/marclundwall/ray_results/checkpoint_001000")
 
         self.schedule_bees = mesa.time.BaseScheduler(self)
 
@@ -43,13 +42,13 @@ class Garden(mesa.Model):
         # Create hive
         self.hive_locations = []
         for _ in range(self.num_hives):
-            hive = Hive(self.next_id(), self, (0, 0))
+            hive = Hive(0, self, (0, 0))
             self.grid.move_to_empty(hive)
             self.hive_locations.append(hive.pos)
             hive_rest_pos = self.grid.get_neighborhood(hive.pos, False, 1)
             possible = [pos for pos in hive_rest_pos if self.grid.is_cell_empty(pos)]
             for p in possible:
-                other_hive = Hive(self.next_id(), self, p)
+                other_hive = Hive(0, self, p)
                 self.grid.place_agent(other_hive, p)
 
         # Create flowers
@@ -76,9 +75,9 @@ class Garden(mesa.Model):
             for _ in range(5):
                 random_pos = (self.random.randint(0, self.grid.width - 1), self.random.randint(0, self.grid.height - 1))
                 while not self.grid.is_cell_empty(random_pos):
-                    random_pos = (self.random.randint(0, self.grid.width), self.random.randint(0, self.grid.height))
+                    random_pos = (self.random.randint(0, self.grid.width - 1), self.random.randint(0, self.grid.height - 1))
                 pos_list.append(random_pos)
-            forest = Forest(self.next_id(), self, pos_list)
+            forest = Forest(0, self, pos_list)
             for pos in pos_list:
                 self.grid.place_agent(forest, pos)
 
