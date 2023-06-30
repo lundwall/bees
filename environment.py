@@ -78,13 +78,14 @@ class raw_env(AECEnv):
         # trace = MultiDiscrete([7] * 10)
         # bee_flags = Box(0, 1, shape=(81,), dtype=np.uint8)
         # hive = Box(0, 1, shape=(49,), dtype=np.uint8)
+        wasp = Box(-50, 50, shape=(2,), dtype=np.int8)
         hive = Box(-50, 50, shape=(2,), dtype=np.int8)
         flower = Box(-50, 50, shape=(2,), dtype=np.int8)
         # target_rel_pos = Box(-50, 50, shape=(2,), dtype=np.int8)
-        map = Box(-4, 20, shape=(49,), dtype=np.int8)
+        map = Box(-5, 20, shape=(49,), dtype=np.int8)
         # observation = Tuple((nectar, bee_flags, flower_nectar, hive))
         # observation = Tuple((nectar, trace, hive, flower, flower_nectar))
-        observation = Tuple((nectar, hive, flower, map))
+        observation = Tuple((nectar, wasp, hive, flower, map))
         # observation = Tuple((target_rel_pos, flower_nectar))
         action_mask = Box(0, 1, shape=(7,), dtype=np.int8)
         return Dict({'observations': observation, 'action_mask': action_mask})
@@ -217,6 +218,9 @@ class raw_env(AECEnv):
         prev_hive_dist = None
         if bee.rel_pos["hive"] != (0, 0):
             prev_hive_dist = bee.dist_to_rel_pos(bee.rel_pos["hive"])
+        prev_wasp_dist = None
+        if bee.rel_pos["wasp"] != (0, 0):
+            prev_wasp_dist = bee.dist_to_rel_pos(bee.rel_pos["wasp"])
         
         bee.step(action)
 
@@ -225,9 +229,12 @@ class raw_env(AECEnv):
         next_flower_dist = None
         if bee.rel_pos["flower"] != (0, 0):
             next_flower_dist = bee.dist_to_rel_pos(bee.rel_pos["flower"])
-        prev_hive_dist = None
+        next_hive_dist = None
         if bee.rel_pos["hive"] != (0, 0):
             next_hive_dist = bee.dist_to_rel_pos(bee.rel_pos["hive"])
+        next_wasp_dist = None
+        if bee.rel_pos["wasp"] != (0, 0):
+            next_wasp_dist = bee.dist_to_rel_pos(bee.rel_pos["wasp"])
 
         reward = abs(next_nectar - prev_nectar)/10.0
         if next_nectar == bee.MAX_NECTAR:
@@ -236,10 +243,13 @@ class raw_env(AECEnv):
         else:
             if prev_flower_dist is not None and next_flower_dist is not None :
                 reward += prev_flower_dist - next_flower_dist
+        if prev_wasp_dist is not None and next_wasp_dist is not None :
+            reward += prev_wasp_dist - next_wasp_dist
         self.rewards[agent] = reward
 
         if self._agent_selector.is_last():
             self.model.schedule_flowers.step()
+            self.model.schedule_wasps.step()
             self.num_rounds += 1
             if self.num_rounds > MAX_ROUNDS:
                 for a in self.agents:

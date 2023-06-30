@@ -43,6 +43,7 @@ class Bee(mesa.Agent):
         self.rel_pos = {
             "hive": (0, 0),
             "flower": (0, 0),
+            "wasp": (0, 0),
         }
         self.best_flower_nectar = 0
     
@@ -97,13 +98,24 @@ class Bee(mesa.Agent):
                     if other_hive_rel_pos != agent_rel_pos:
                         if self.rel_pos["hive"] == (0, 0) or self.dist_to_rel_pos(other_hive_rel_pos) < self.dist_to_rel_pos(self.rel_pos["hive"]):
                             self.rel_pos["hive"] = other_hive_rel_pos
+                    # Same for wasp
+                    other_wasp_rel_pos = self.sum_rel_pos(agent_rel_pos, agent.rel_pos["wasp"])
+                    # The other bee has found or heard about a wasp
+                    # Otherwise, its rel_pos["wasp"] would be (0, 0)
+                    if other_wasp_rel_pos != agent_rel_pos:
+                        if self.rel_pos["wasp"] == (0, 0) or self.dist_to_rel_pos(other_wasp_rel_pos) < self.dist_to_rel_pos(self.rel_pos["wasp"]):
+                            self.rel_pos["wasp"] = other_wasp_rel_pos
                 elif type(agent) is Hive:
                     # hives[agent_coor[0]][agent_coor[1]] = 1
                     map[agent_coor[0]][agent_coor[1]] = -3
                     hive_rel_pos = self.pos_to_rel_pos(agent.pos)
                     self.rel_pos["hive"] = hive_rel_pos
-                elif type(agent) is Forest:
+                elif type(agent) is Wasp:
                     map[agent_coor[0]][agent_coor[1]] = -4
+                    wasp_rel_pos = self.pos_to_rel_pos(agent.pos)
+                    self.rel_pos["wasp"] = wasp_rel_pos
+                elif type(agent) is Forest:
+                    map[agent_coor[0]][agent_coor[1]] = -5
                     hive_rel_pos = self.pos_to_rel_pos(agent.pos)
                     self.rel_pos["hive"] = hive_rel_pos
 
@@ -149,6 +161,7 @@ class Bee(mesa.Agent):
 
         trace = np.array(list(self.trace))
 
+        wasp_rel_pos = np.array(list(self.rel_pos["flower"]))
         hive_rel_pos = np.array(list(self.rel_pos["hive"]))
         flower_rel_pos = np.array(list(self.rel_pos["flower"]))
 
@@ -158,7 +171,7 @@ class Bee(mesa.Agent):
             target_rel_pos = flower_rel_pos
 
         # return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, bee_flags, flower_nectar, hives), "action_mask": action_mask}
-        return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, hive_rel_pos, flower_rel_pos, map), "action_mask": action_mask}
+        return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, wasp_rel_pos, hive_rel_pos, flower_rel_pos, map), "action_mask": action_mask}
         # return {"observations": (target_rel_pos, flower_nectar), "action_mask": action_mask}
             
     def step(self, action=None):
@@ -241,6 +254,18 @@ class Wasp(mesa.Agent):
     def __init__(self, unique_id, model, pos):
         super().__init__(unique_id, model)
         self.pos = pos
+        self.suffocation_time = 0
     
     def step(self):
-        pass
+        nbs = self.model.grid.get_neighborhood(self.pos, False, 1)
+        valid_nbs = [pos for pos in nbs if self.model.grid.is_cell_empty(pos)]
+        # Wasp dies if it has no 'air' for 3 units of time
+        if len(valid_nbs) == 0:
+            self.suffocation_time += 1
+            if self.suffocation_time >= 3:
+                self.model.grid.remove_agent(self)
+                self.model.schedule_wasps.remove(self)
+            return
+        
+        random_nb = self.model.random.choice(valid_nbs)
+        self.model.grid.move_agent(self, random_nb)

@@ -22,8 +22,10 @@ class Garden(mesa.Model):
             self.algo = PPO.from_checkpoint("/Users/marclundwall/ray_results/checkpoint_001000")
 
         self.schedule_bees = mesa.time.BaseScheduler(self)
+        self.schedule_wasps = mesa.time.BaseScheduler(self)
 
         self.num_bees = N
+        self.num_wasps = num_wasps
         self.num_bouquets = num_bouquets
         self.num_hives = num_hives
         self.grid = mesa.space.HexGrid(width, height, False)
@@ -32,12 +34,6 @@ class Garden(mesa.Model):
         self.current_id = -1
 
         flower_colors = ["blue", "orange", "red", "pink"]
-
-        # Create bees
-        for _ in range(self.num_bees):
-            bee = Bee(self.next_id(), self, (0, 0))
-            self.schedule_bees.add(bee)
-            self.grid.move_to_empty(bee)
 
         # Create hive
         self.hive_locations = []
@@ -51,11 +47,23 @@ class Garden(mesa.Model):
                 other_hive = Hive(0, self, p)
                 self.grid.place_agent(other_hive, p)
 
+        # Create bees
+        for _ in range(self.num_bees):
+            bee = Bee(self.next_id(), self, (0, 0))
+            self.schedule_bees.add(bee)
+            self.grid.move_to_empty(bee)
+
+        # Create wasps
+        for _ in range(self.num_wasps):
+            wasp = Wasp(self.next_id(), self, (0, 0))
+            self.schedule_wasps.add(wasp)
+            self.grid.move_to_empty(wasp)
+
         # Create flowers
         self.flowers = []
         for _ in range(self.num_bouquets):
             group_color = self.random.choice(flower_colors)
-            group_size = self.random.randint(0, 12)
+            group_size = self.random.randint(3, 12)
             group_max_nectar = self.random.randint(5, 20)
             flower = Flower(self.next_id(), self, (0, 0), group_color, group_max_nectar)
             self.schedule_flowers.add(flower)
@@ -84,6 +92,7 @@ class Garden(mesa.Model):
     def step(self) -> None:
         self.schedule_bees.step()
         self.schedule_flowers.step()
+        self.schedule_wasps.step()
 
     def run_model(self, n: int = 10) -> None:
         for _ in range(n):
