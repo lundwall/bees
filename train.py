@@ -9,7 +9,7 @@ from ray.air.integrations.wandb import WandbLoggerCallback
 # import the pettingzoo environment
 import environment as environment
 # import rllib pettingzoo interface
-from ray.rllib.env.wrappers.pettingzoo_env import PettingZooEnv
+from pettingzoo_env import PettingZooEnv
 
 # Limit number of cores
 ray.init(num_cpus=16)

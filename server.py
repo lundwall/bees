@@ -10,7 +10,7 @@ def Bees_portrayal(agent):
         return
 
     if type(agent) is Bee:
-        return {"Shape": "resources/bee.png", "scale": 1, "Layer": 1, "nectar": agent.nectar, "hive_pos": agent.rel_pos["hive"], "flower_pos": agent.rel_pos["flower"], "best_nectar": agent.best_flower_nectar}
+        return {"Shape": "resources/bee.png", "scale": 1, "Layer": 1, "nectar": agent.nectar, "wasp_pos": agent.rel_pos["wasp"], "hive_pos": agent.rel_pos["hive"], "flower_pos": agent.rel_pos["flower"], "best_nectar": agent.best_flower_nectar}
 
     elif type(agent) is Flower:
         return {"Shape": f"resources/flower_{agent.color}.png", "scale": 1, "Layer": 1, "nectar": agent.nectar}
