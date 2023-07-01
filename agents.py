@@ -52,6 +52,9 @@ class Bee(mesa.Agent):
 
     def pos_to_rel_pos(self, pos):
         return (pos[0] - self.pos[0], pos[1] - self.pos[1])
+
+    def rel_pos_to_pos(self, pos):
+        return (pos[0] + self.pos[0], pos[1] + self.pos[1])
     
     def sum_rel_pos(self, a_pos, b_pos):
         return (a_pos[0] + b_pos[0], a_pos[1] + b_pos[1])
@@ -122,7 +125,7 @@ class Bee(mesa.Agent):
         # If the wasp is not at the advertised location, forget it
         if self.rel_pos["wasp"] != (0, 0) and self.dist_to_rel_pos(self.rel_pos["wasp"]) <= 18:
             wasp_seen = False
-            for agents in self.model.grid.get_cell_list_contents([self.rel_pos["wasp"]]):
+            for agents in self.model.grid.get_cell_list_contents([self.rel_pos_to_pos(self.rel_pos["wasp"])]):
                 if type(agents) is Wasp:
                     wasp_seen = True
                     break
