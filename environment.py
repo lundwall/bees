@@ -71,6 +71,8 @@ class raw_env(AECEnv):
         # flower_nectar = Box(0, 99, shape=(121,), dtype=np.uint8)
         # hive = Box(0, 1, shape=(121,), dtype=np.uint8)
 
+        #return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, wasp_rel_pos, hive_rel_pos, flower_rel_pos, obstacles, bee_presence, flower_presence, flower_nectar, wasp_presence, hive_presence, trace), "action_mask": action_mask}
+
         # nectar = Discrete(101)
         # bee_flags = Box(0, 255, shape=(81,), dtype=np.uint8)
         # flower_nectar = Box(0, 100, shape=(81,), dtype=np.uint8)
@@ -84,10 +86,19 @@ class raw_env(AECEnv):
         hive = Box(-50, 50, shape=(2,), dtype=np.int8)
         flower = Box(-50, 50, shape=(2,), dtype=np.int8)
         # target_rel_pos = Box(-50, 50, shape=(2,), dtype=np.int8)
-        map = Box(-5, 20, shape=(49,), dtype=np.int8)
+        # map = Box(-5, 20, shape=(49,), dtype=np.int8)
+        obstacles = Box(0, 1, shape=(49,), dtype=np.uint8)
+        bee_presence = Box(0, 1, shape=(49,), dtype=np.uint8)
+        flower_presence = Box(0, 1, shape=(49,), dtype=np.uint8)
+        flower_nectar = Box(0, 20, shape=(49,), dtype=np.uint8)
+        wasp_presence = Box(0, 1, shape=(49,), dtype=np.uint8)
+        hive_presence = Box(0, 1, shape=(49,), dtype=np.uint8)
+        trace = Box(0, 1, shape=(49,), dtype=np.uint8)
+
         # observation = Tuple((nectar, bee_flags, flower_nectar, hive))
         # observation = Tuple((nectar, trace, hive, flower, flower_nectar))
-        observation = Tuple((nectar, wasp, hive, flower, map))
+        # observation = Tuple((nectar, wasp, hive, flower, map))
+        observation = Tuple((nectar, wasp, hive, flower, obstacles, bee_presence, flower_presence, flower_nectar, wasp_presence, hive_presence, trace))
         # observation = Tuple((target_rel_pos, flower_nectar))
         action_mask = Box(0, 1, shape=(7,), dtype=np.int8)
         return Dict({'observations': observation, 'action_mask': action_mask})

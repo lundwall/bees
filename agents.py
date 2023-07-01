@@ -61,7 +61,13 @@ class Bee(mesa.Agent):
     
     def observe(self):
         # (nectar, bee flags, flower nectar, hive location)
-        # bee_flags = [[0 for _ in range(7)] for _ in range(7)]
+        obstacles = [[0 for _ in range(7)] for _ in range(7)]
+        bee_presence = [[0 for _ in range(7)] for _ in range(7)]
+        flower_presence = [[0 for _ in range(7)] for _ in range(7)]
+        flower_nectar = [[0 for _ in range(7)] for _ in range(7)]
+        wasp_presence = [[0 for _ in range(7)] for _ in range(7)]
+        hive_presence = [[0 for _ in range(7)] for _ in range(7)]
+        trace = [[0 for _ in range(7)] for _ in range(7)]
         map = [[0 for _ in range(7)] for _ in range(7)]
         # hives = [[0 for _ in range(7)] for _ in range(7)]
         for pos in self.model.grid.iter_neighborhood(self.pos, False, self.VISION):
@@ -80,8 +86,11 @@ class Bee(mesa.Agent):
                             self.best_flower_nectar = agent.nectar
                             self.rel_pos["flower"] = flower_rel_pos
                     map[agent_coor[0]][agent_coor[1]] = agent.nectar
+                    flower_presence[agent_coor[0]][agent_coor[1]] = 1
+                    flower_nectar[agent_coor[0]][agent_coor[1]] = agent.nectar
                 elif type(agent) is Bee:
                     map[agent_coor[0]][agent_coor[1]] = -2
+                    bee_presence[agent_coor[0]][agent_coor[1]] = 1
                     agent_rel_pos = self.pos_to_rel_pos(agent.pos)
                     other_flower_rel_pos = self.sum_rel_pos(agent_rel_pos, agent.rel_pos["flower"])
                     # The other bee has found or heard about a flower
@@ -111,14 +120,17 @@ class Bee(mesa.Agent):
                 elif type(agent) is Hive:
                     # hives[agent_coor[0]][agent_coor[1]] = 1
                     map[agent_coor[0]][agent_coor[1]] = -3
+                    hive_presence[agent_coor[0]][agent_coor[1]] = 1
                     hive_rel_pos = self.pos_to_rel_pos(agent.pos)
                     self.rel_pos["hive"] = hive_rel_pos
                 elif type(agent) is Wasp:
                     map[agent_coor[0]][agent_coor[1]] = -4
+                    wasp_presence[agent_coor[0]][agent_coor[1]] = 1
                     wasp_rel_pos = self.pos_to_rel_pos(agent.pos)
                     self.rel_pos["wasp"] = wasp_rel_pos
                 elif type(agent) is Forest:
                     map[agent_coor[0]][agent_coor[1]] = -5
+                    obstacles[agent_coor[0]][agent_coor[1]] = 1
                     hive_rel_pos = self.pos_to_rel_pos(agent.pos)
                     self.rel_pos["hive"] = hive_rel_pos
         
@@ -138,28 +150,38 @@ class Bee(mesa.Agent):
             rel_t = (rel_t[0] + 3, rel_t[1] + 3)
             if rel_t[0] >= 0 and rel_t[0] < 7 and rel_t[1] >= 0 and rel_t[1] < 7:
                 map[rel_t[0]][rel_t[1]] = -1
+                trace[rel_t[0]][rel_t[1]] = 1
 
         # Add edges of map
         if self.pos[0] < 3:
             for x in range(3 - self.pos[0]):
                 for y in range(7):
                     map[x][y] = -4
+                    obstacles[x][y] = 1
         if self.pos[0] > (self.model.grid.width-1) - 3:
             for x in range((self.model.grid.width-1) - self.pos[0] + 4, 7):
                 for y in range(7):
                     map[x][y] = -4
+                    obstacles[x][y] = 1
         if self.pos[1] < 3:
             for y in range(3 - self.pos[1]):
                 for x in range(7):
                     map[x][y] = -4
+                    obstacles[x][y] = 1
         if self.pos[1] > (self.model.grid.height-1) - 3:
             for y in range((self.model.grid.height-1) - self.pos[1] + 4, 7):
                 for x in range(7):
                     map[x][y] = -4
+                    obstacles[x][y] = 1
 
-        # bee_flags = np.array([item for sublist in bee_flags for item in sublist])
         map = np.array([item for sublist in map for item in sublist])
-        # hives = np.array([item for sublist in hives for item in sublist])
+        obstacles = np.array([item for sublist in obstacles for item in sublist])
+        bee_presence = np.array([item for sublist in bee_presence for item in sublist])
+        flower_presence = np.array([item for sublist in flower_presence for item in sublist])
+        flower_nectar = np.array([item for sublist in flower_nectar for item in sublist])
+        wasp_presence = np.array([item for sublist in wasp_presence for item in sublist])
+        hive_presence = np.array([item for sublist in hive_presence for item in sublist])
+        trace = np.array([item for sublist in trace for item in sublist])
 
         action_mask = np.ones(7, dtype=np.int8)
         if self.pos[0] % 2 == 0:
@@ -184,7 +206,8 @@ class Bee(mesa.Agent):
             target_rel_pos = flower_rel_pos
 
         # return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, bee_flags, flower_nectar, hives), "action_mask": action_mask}
-        return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, wasp_rel_pos, hive_rel_pos, flower_rel_pos, map), "action_mask": action_mask}
+        # return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, wasp_rel_pos, hive_rel_pos, flower_rel_pos, map), "action_mask": action_mask}
+        return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, wasp_rel_pos, hive_rel_pos, flower_rel_pos, obstacles, bee_presence, flower_presence, flower_nectar, wasp_presence, hive_presence, trace), "action_mask": action_mask}
         # return {"observations": (target_rel_pos, flower_nectar), "action_mask": action_mask}
             
     def step(self, action=None):
