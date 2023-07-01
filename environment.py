@@ -13,6 +13,8 @@ from pettingzoo import AECEnv
 from pettingzoo.utils import agent_selector, wrappers
 
 MAX_ROUNDS = 100
+# OBJECTIVE = "NECTAR"
+OBJECTIVE = "WASPS"
 
 def env(render_mode=None):
     """
@@ -237,21 +239,22 @@ class raw_env(AECEnv):
             next_wasp_dist = bee.dist_to_rel_pos(bee.rel_pos["wasp"])
 
         reward = abs(next_nectar - prev_nectar)/10.0
-        if next_nectar == bee.MAX_NECTAR:
-            if prev_hive_dist is not None and next_hive_dist is not None :
-                reward += prev_hive_dist - next_hive_dist
-        else:
-            if prev_flower_dist is not None and next_flower_dist is not None :
-                reward += prev_flower_dist - next_flower_dist
         if prev_wasp_dist is not None and next_wasp_dist is not None :
             reward += prev_wasp_dist - next_wasp_dist
+        else:
+            if next_nectar == bee.MAX_NECTAR:
+                if prev_hive_dist is not None and next_hive_dist is not None :
+                    reward += prev_hive_dist - next_hive_dist
+            else:
+                if prev_flower_dist is not None and next_flower_dist is not None :
+                    reward += prev_flower_dist - next_flower_dist
         self.rewards[agent] = reward
 
         if self._agent_selector.is_last():
             self.model.schedule_flowers.step()
             self.model.schedule_wasps.step()
             self.num_rounds += 1
-            if self.num_rounds > MAX_ROUNDS:
+            if self.num_rounds > MAX_ROUNDS or (OBJECTIVE == "WASPS" and self.model.schedule_wasps.get_agent_count() == 0):
                 for a in self.agents:
                     self.truncations[a] = True
 

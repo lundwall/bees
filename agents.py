@@ -118,6 +118,16 @@ class Bee(mesa.Agent):
                     map[agent_coor[0]][agent_coor[1]] = -5
                     hive_rel_pos = self.pos_to_rel_pos(agent.pos)
                     self.rel_pos["hive"] = hive_rel_pos
+        
+        # If the wasp is not at the advertised location, forget it
+        if self.rel_pos["wasp"] != (0, 0) and self.dist_to_rel_pos(self.rel_pos["wasp"]) <= 18:
+            wasp_seen = False
+            for agents in self.model.grid.get_cell_list_contents([self.rel_pos["wasp"]]):
+                if type(agents) is Wasp:
+                    wasp_seen = True
+                    break
+            if not wasp_seen:
+                self.rel_pos["wasp"] = (0, 0)
 
         # Add trace rel locs to map
         for t in self.trace_locs:
