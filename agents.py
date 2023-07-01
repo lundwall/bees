@@ -181,7 +181,7 @@ class Bee(mesa.Agent):
         flower_nectar = np.array([item for sublist in flower_nectar for item in sublist])
         wasp_presence = np.array([item for sublist in wasp_presence for item in sublist])
         hive_presence = np.array([item for sublist in hive_presence for item in sublist])
-        trace_presence = np.array([item for sublist in trace for item in sublist])
+        trace_presence = np.array([item for sublist in trace_presence for item in sublist])
 
         action_mask = np.ones(7, dtype=np.int8)
         if self.pos[0] % 2 == 0:
