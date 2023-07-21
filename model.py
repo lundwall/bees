@@ -1,14 +1,15 @@
 import mesa
-from agents import Bee, Hive, Flower, Wasp, Forest
+from agents import Bee, BeeManual, Hive, Flower, Wasp, Forest
 
 class Garden(mesa.Model):
     """
     A model with some number of bees.
     """
 
-    def __init__(self, N: int = 25, width: int = 50, height: int = 50, num_hives: int = 0, num_bouquets: int = 0, num_forests: int = 0, num_wasps: int = 0, training = False, seed = None) -> None:
+    def __init__(self, N: int = 25, width: int = 50, height: int = 50, num_hives: int = 0, num_bouquets: int = 0, num_forests: int = 0, num_wasps: int = 0, seed = None, rl = True, training = False, training_checkpoint = None) -> None:
         self.training = training
-        if not training:
+        self.rl = rl
+        if rl and not training:
             from ray.rllib.algorithms.ppo import PPO
             from ray.tune.registry import register_env
             # import the pettingzoo environment
@@ -19,7 +20,12 @@ class Garden(mesa.Model):
             env_creator = lambda config: environment.env()
             # register that way to make the environment under an rllib name
             register_env('environment', lambda config: PettingZooEnv(env_creator(config)))
-            self.algo = PPO.from_checkpoint("/Users/marclundwall/ray_results/wasps")
+            self.algo = PPO.from_checkpoint(training_checkpoint)
+
+        if self.rl:
+            bee_class = Bee
+        else:
+            bee_class = BeeManual
 
         self.schedule_bees = mesa.time.BaseScheduler(self)
         self.schedule_wasps = mesa.time.BaseScheduler(self)
@@ -49,7 +55,7 @@ class Garden(mesa.Model):
 
         # Create bees
         for _ in range(self.num_bees):
-            bee = Bee(self.next_id(), self, (0, 0))
+            bee = bee_class(self.next_id(), self, (0, 0))
             self.schedule_bees.add(bee)
             self.grid.move_to_empty(bee)
 

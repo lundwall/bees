@@ -20,6 +20,7 @@ env_creator = lambda config: environment.env()
 register_env('environment', lambda config: PettingZooEnv(env_creator(config)))
 
 config = PPOConfig()
+config = config.rollouts(num_rollout_workers=15)
 config = config.training(
     model={
         "custom_model": TorchActionMaskModel,
@@ -41,7 +42,7 @@ hyperopt_search = HyperOptSearch(
 tuner = tune.Tuner(
     "PPO",
     run_config=air.RunConfig(
-        name="wasps",
+        name="final_wasps",
         local_dir="/itet-stor/mlundwall/net_scratch/ray_results",
         # local_dir="/Users/marclundwall/ray_results",
         stop={"training_iteration": 2000},
@@ -51,7 +52,7 @@ tuner = tune.Tuner(
         ),
     ),
     tune_config=tune.TuneConfig(
-        num_samples=5,
+        num_samples=1,
         #search_alg=hyperopt_search,
         #scheduler=AsyncHyperBandScheduler(
         #    time_attr="training_iteration",
