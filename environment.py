@@ -15,6 +15,7 @@ from pettingzoo.utils import agent_selector, wrappers
 MAX_ROUNDS = 100
 # OBJECTIVE = "NECTAR"
 OBJECTIVE = "WASPS"
+REWARD_SHAPING = False
 
 def env(render_mode=None):
     """
@@ -250,15 +251,24 @@ class raw_env(AECEnv):
             next_wasp_dist = bee.dist_to_rel_pos(bee.rel_pos["wasp"])
 
         reward = abs(next_nectar - prev_nectar)/10.0
-        if prev_wasp_dist is not None and next_wasp_dist is not None :
-            reward += prev_wasp_dist - next_wasp_dist
+        if bee.pos[0] % 2 == 0:
+            diffs = bee.even_x_diffs
         else:
-            if next_nectar == bee.MAX_NECTAR:
-                if prev_hive_dist is not None and next_hive_dist is not None :
-                    reward += prev_hive_dist - next_hive_dist
+            diffs = bee.odd_x_diffs
+        if bee.rel_pos["wasp"] != (0, 0):
+            if bee.rel_pos["wasp"] in diffs.values():
+                reward += 1.0
+        
+        if REWARD_SHAPING:
+            if prev_wasp_dist is not None and next_wasp_dist is not None :
+                reward += prev_wasp_dist - next_wasp_dist
             else:
-                if prev_flower_dist is not None and next_flower_dist is not None :
-                    reward += prev_flower_dist - next_flower_dist
+                if next_nectar == bee.MAX_NECTAR:
+                    if prev_hive_dist is not None and next_hive_dist is not None :
+                        reward += prev_hive_dist - next_hive_dist
+                else:
+                    if prev_flower_dist is not None and next_flower_dist is not None :
+                        reward += prev_flower_dist - next_flower_dist
         self.rewards[agent] = reward
 
         if self._agent_selector.is_last():
