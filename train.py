@@ -11,16 +11,19 @@ import environment as environment
 # import rllib pettingzoo interface
 from pettingzoo_env import PettingZooEnv
 
+EXPERIMENT_NAME = "no_curriculum_20s"
+RESULTS_DIR = "/itet-stor/mlundwall/net_scratch/ray_results"
+
 # Limit number of cores
 ray.init(num_cpus=16)
 
 # define how to make the environment. This way takes an optional environment config
-env_creator = lambda config: environment.env(num_bouquets=config.get("num_bouquets", 1), num_hives=config.get("num_hives", 1), num_wasps=config.get("num_wasps", 3))
+env_creator = lambda config: environment.env(ends_when_no_wasps=config.get("ends_when_no_wasps", False), num_bouquets=config.get("num_bouquets", 1), num_hives=config.get("num_hives", 1), num_wasps=config.get("num_wasps", 3), observes_rel_pos=config.get("observes_rel_pos", False), reward_shaping=config.get("reward_shaping", False))
 # register that way to make the environment under an rllib name
 register_env('environment', lambda config: PettingZooEnv(env_creator(config)))
 
 config = PPOConfig()
-config = config.rollouts(num_rollout_workers=15)
+# config = config.rollouts(num_rollout_workers=2)
 config = config.training(
     model={
         "custom_model": TorchActionMaskModel,
@@ -28,9 +31,10 @@ config = config.training(
     #lr=tune.uniform(1e-5, 1e-4),
     #train_batch_size=tune.randint(1_000, 10_000),
 )
-#config = config.rollouts(rollout_fragment_length=tune.randint(5, 4000))
 config = config.environment('environment')
-config['env_config'] = {"num_bouquets": 1, "num_hives": 1, "num_wasps": 3}
+
+# Configure environment parameters here
+config['env_config'] = {"ends_when_no_wasps": False, "num_bouquets": 1, "num_hives": 1, "num_wasps": 3, "observes_rel_pos": False, "reward_shaping": False}
 
 current_best_params = [
     {"lr": 5e-5, "train_batch_size": 4000},
@@ -43,9 +47,8 @@ hyperopt_search = HyperOptSearch(
 tuner = tune.Tuner(
     "PPO",
     run_config=air.RunConfig(
-        name="final_wasps",
-        local_dir="/itet-stor/mlundwall/net_scratch/ray_results",
-        # local_dir="/Users/marclundwall/ray_results",
+        name=EXPERIMENT_NAME,
+        local_dir=RESULTS_DIR,
         stop={"training_iteration": 2000},
         callbacks=[WandbLoggerCallback(project="bees", api_key_file="~/.wandb_api_key", log_config=True)],
         checkpoint_config=air.CheckpointConfig(
@@ -53,7 +56,7 @@ tuner = tune.Tuner(
         ),
     ),
     tune_config=tune.TuneConfig(
-        num_samples=1,
+        num_samples=5,
         #search_alg=hyperopt_search,
         #scheduler=AsyncHyperBandScheduler(
         #    time_attr="training_iteration",
