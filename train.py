@@ -15,7 +15,7 @@ from pettingzoo_env import PettingZooEnv
 ray.init(num_cpus=16)
 
 # define how to make the environment. This way takes an optional environment config
-env_creator = lambda config: environment.env()
+env_creator = lambda config: environment.env(num_bouquets=config.get("num_bouquets", 1), num_hives=config.get("num_hives", 1), num_wasps=config.get("num_wasps", 3))
 # register that way to make the environment under an rllib name
 register_env('environment', lambda config: PettingZooEnv(env_creator(config)))
 
@@ -30,6 +30,7 @@ config = config.training(
 )
 #config = config.rollouts(rollout_fragment_length=tune.randint(5, 4000))
 config = config.environment('environment')
+config['env_config'] = {"num_bouquets": 1, "num_hives": 1, "num_wasps": 3}
 
 current_best_params = [
     {"lr": 5e-5, "train_batch_size": 4000},

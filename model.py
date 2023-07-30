@@ -6,7 +6,7 @@ class Garden(mesa.Model):
     A model with some number of bees.
     """
 
-    def __init__(self, N: int = 25, width: int = 50, height: int = 50, num_hives: int = 0, num_bouquets: int = 0, num_forests: int = 0, num_wasps: int = 0, seed = None, rl = True, training = False, training_checkpoint = None) -> None:
+    def __init__(self, N: int = 25, width: int = 50, height: int = 50, num_hives: int = 0, num_bouquets: int = 0, num_forests: int = 0, num_wasps: int = 0, observes_rel_pos = False, seed = None, rl = True, training = False, training_checkpoint = None) -> None:
         self.training = training
         self.rl = rl
         if rl and not training:
@@ -55,7 +55,7 @@ class Garden(mesa.Model):
 
         # Create bees
         for _ in range(self.num_bees):
-            bee = bee_class(self.next_id(), self, (0, 0))
+            bee = bee_class(self.next_id(), self, (0, 0), observes_rel_pos=observes_rel_pos)
             self.schedule_bees.add(bee)
             self.grid.move_to_empty(bee)
 
@@ -69,7 +69,7 @@ class Garden(mesa.Model):
         self.flowers = []
         for _ in range(self.num_bouquets):
             group_color = self.random.choice(flower_colors)
-            group_size = self.random.randint(3, 12)
+            group_size = self.random.randint(3, 6)
             group_max_nectar = self.random.randint(5, 20)
             flower = Flower(self.next_id(), self, (0, 0), group_color, group_max_nectar)
             self.schedule_flowers.add(flower)

@@ -1,4 +1,4 @@
-from agents import Bee, Hive, Flower
+from agents import Bee, Hive, Flower, Wasp
 from model import Garden
 from visualization.TextVisualization import TextGrid
 
@@ -13,18 +13,15 @@ from pettingzoo import AECEnv
 from pettingzoo.utils import agent_selector, wrappers
 
 MAX_ROUNDS = 100
-# OBJECTIVE = "NECTAR"
-OBJECTIVE = "WASPS"
-REWARD_SHAPING = False
 
-def env(render_mode=None):
+def env(render_mode=None, ends_when_no_wasps=False, num_bouquets=1, num_hives=1, num_wasps=3, observes_rel_pos=False, reward_shaping=False):
     """
     The env function often wraps the environment in wrappers by default.
     You can find full documentation for these methods
     elsewhere in the developer documentation.
     """
     internal_render_mode = render_mode if render_mode != "ansi" else "human"
-    env = raw_env(render_mode=internal_render_mode)
+    env = raw_env(render_mode=internal_render_mode, ends_when_no_wasps=ends_when_no_wasps, num_bouquets=num_bouquets, num_hives=num_hives, num_wasps=num_wasps, observes_rel_pos=observes_rel_pos, reward_shaping=reward_shaping)
     # This wrapper is only for environments which print results to the terminal
     if render_mode == "ansi":
         env = wrappers.CaptureStdoutWrapper(env)
@@ -44,7 +41,7 @@ class raw_env(AECEnv):
 
     metadata = {"render_modes": ["human"], "name": "rps_v2"}
 
-    def __init__(self, render_mode=None):
+    def __init__(self, render_mode=None, ends_when_no_wasps=False, num_bouquets=1, num_hives=1, num_wasps=3, observes_rel_pos=False, reward_shaping=False):
         """
         The init method takes in environment arguments and
          should define the following attributes:
@@ -60,6 +57,13 @@ class raw_env(AECEnv):
         self.possible_agents = [f"bee_{i}" for i in range(10)]
 
         self.render_mode = render_mode
+
+        self.ends_when_no_wasps = ends_when_no_wasps
+        self.num_bouquets = num_bouquets
+        self.num_hives = num_hives
+        self.num_wasps = num_wasps
+        self.observes_rel_pos = observes_rel_pos
+        self.reward_shaping = reward_shaping
 
     # Observation space should be defined here.
     # lru_cache allows observation and action spaces to be memoized, reducing clock cycles required to get each agent's space.
@@ -96,11 +100,11 @@ class raw_env(AECEnv):
         hive_presence = Box(0, 1, shape=(49,), dtype=np.uint8)
         trace_presence = Box(0, 1, shape=(49,), dtype=np.uint8)
 
-        # observation = Tuple((nectar, bee_flags, flower_nectar, hive))
-        # observation = Tuple((nectar, trace, hive, flower, flower_nectar))
-        # observation = Tuple((nectar, wasp, hive, flower, map))
-        observation = Tuple((nectar, wasp, hive, flower, obstacles, bee_presence, flower_presence, flower_nectar, wasp_presence, hive_presence, trace_presence))
-        # observation = Tuple((target_rel_pos, flower_nectar))
+        if self.observes_rel_pos:
+            observation = Tuple((nectar, wasp, hive, flower, obstacles, bee_presence, flower_presence, flower_nectar, wasp_presence, hive_presence, trace_presence))
+        else:
+            observation = Tuple((nectar, obstacles, bee_presence, flower_presence, flower_nectar, wasp_presence, hive_presence, trace_presence))
+
         action_mask = Box(0, 1, shape=(7,), dtype=np.int8)
         return Dict({'observations': observation, 'action_mask': action_mask})
 
@@ -172,7 +176,7 @@ class raw_env(AECEnv):
         can be called without issues.
         Here it sets up the state dictionary which is used by step() and the observations dictionary which is used by step() and observe()
         """
-        self.model = Garden(N=10, width=20, height=20, num_hives=0, num_bouquets=0, num_wasps=3, training=True)
+        self.model = Garden(N=10, width=20, height=20, num_hives=self.num_hives, num_bouquets=self.num_bouquets, num_wasps=self.num_wasps, training=True, observes_rel_pos=self.observes_rel_pos)
         self.visualizer = TextGrid(self.model.grid, self.converter)
         self.agents = self.possible_agents[:]
         self.rewards = {agent: 0 for agent in self.agents}
@@ -250,16 +254,18 @@ class raw_env(AECEnv):
         if bee.rel_pos["wasp"] != (0, 0):
             next_wasp_dist = bee.dist_to_rel_pos(bee.rel_pos["wasp"])
 
+        # Receive nectar reward
         reward = abs(next_nectar - prev_nectar)/10.0
-        if bee.pos[0] % 2 == 0:
-            diffs = bee.even_x_diffs
-        else:
-            diffs = bee.odd_x_diffs
-        if bee.rel_pos["wasp"] != (0, 0):
-            if bee.rel_pos["wasp"] in diffs.values():
-                reward += 1.0
+        # Receive wasp reward
+        # Give more reward when wasp is more surrounded
+        for a in bee.model.grid.get_neighbors(bee.pos, False, 1):
+            if type(a) is Wasp:
+                nbs = bee.model.grid.get_neighborhood(a.pos, False, 1)
+                valid_nbs = [pos for pos in nbs if bee.model.grid.is_cell_empty(pos)]
+                num_blocked = 6 - len(valid_nbs)
+                reward += num_blocked
         
-        if REWARD_SHAPING:
+        if self.reward_shaping:
             if prev_wasp_dist is not None and next_wasp_dist is not None :
                 reward += prev_wasp_dist - next_wasp_dist
             else:
@@ -275,7 +281,7 @@ class raw_env(AECEnv):
             self.model.schedule_flowers.step()
             self.model.schedule_wasps.step()
             self.num_rounds += 1
-            if self.num_rounds > MAX_ROUNDS or (OBJECTIVE == "WASPS" and self.model.schedule_wasps.get_agent_count() == 0):
+            if self.num_rounds > MAX_ROUNDS or (self.ends_when_no_wasps and self.model.schedule_wasps.get_agent_count() == 0):
                 for a in self.agents:
                     self.truncations[a] = True
 

@@ -30,10 +30,11 @@ class Bee(mesa.Agent):
         6: (-1, 0)
     }
 
-    def __init__(self, unique_id, model, pos):
+    def __init__(self, unique_id, model, pos, observes_rel_pos=False):
         super().__init__(unique_id, model)
         self.pos = pos
         self.nectar = 0
+        self.observes_rel_pos = observes_rel_pos
         # Sometimes make bee start with full nectar to help training to go towards hive
         if self.model.training and self.model.random.randint(0, 1) == 0:
             self.nectar = self.MAX_NECTAR
@@ -51,10 +52,20 @@ class Bee(mesa.Agent):
         return (pos[0] - offset[0])**2 + (pos[1] - offset[1])**2
 
     def pos_to_rel_pos(self, pos):
-        return (pos[0] - self.pos[0], pos[1] - self.pos[1])
+        new_x = pos[0] - self.pos[0]
+        new_y = pos[1] - self.pos[1]
+        if self.pos[0] % 2 == 0 and new_x % 2 == 1:
+            new_y -= 1
+
+        return (new_x, new_y)
 
     def rel_pos_to_pos(self, pos):
-        return (pos[0] + self.pos[0], pos[1] + self.pos[1])
+        original_x = pos[0] + self.pos[0]
+        original_y = pos[1] + self.pos[1]
+        if self.pos[0] % 2 == 0 and pos[0] % 2 == 1:
+            original_y += 1
+
+        return (original_x, original_y)
     
     def sum_rel_pos(self, a_pos, b_pos):
         return (a_pos[0] + b_pos[0], a_pos[1] + b_pos[1])
@@ -202,7 +213,11 @@ class Bee(mesa.Agent):
 
         # return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, bee_flags, flower_nectar, hives), "action_mask": action_mask}
         # return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, wasp_rel_pos, hive_rel_pos, flower_rel_pos, map), "action_mask": action_mask}
-        return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, wasp_rel_pos, hive_rel_pos, flower_rel_pos, obstacles, bee_presence, flower_presence, flower_nectar, wasp_presence, hive_presence, trace_presence), "action_mask": action_mask}
+        if self.observes_rel_pos:
+            observations = {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, wasp_rel_pos, hive_rel_pos, flower_rel_pos, obstacles, bee_presence, flower_presence, flower_nectar, wasp_presence, hive_presence, trace_presence), "action_mask": action_mask}
+        else:
+            observations = {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, obstacles, bee_presence, flower_presence, flower_nectar, wasp_presence, hive_presence, trace_presence), "action_mask": action_mask}
+        return observations
         # return {"observations": (target_rel_pos, flower_nectar), "action_mask": action_mask}
             
     def step(self, action=None):
