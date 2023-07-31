@@ -42,8 +42,8 @@ def curriculum_fn(
     # Level 1: Expect rewards between 0.0 and 1.0.
     # Level 2: Expect rewards between 1.0 and 10.0, etc..
     # We will thus raise the level/task each time we hit a new power of 10.0
-    latest_reward = train_results.get("episode_reward_mean", 0)
-    latest_iteration = train_results.get("training_iteration", 0)
+    latest_reward = train_results["episode_reward_mean"]
+    latest_iteration = train_results["timesteps_total"] // 4000
     task_settable_env.reward_mean_history.append(latest_reward)
     num_rewards = len(task_settable_env.reward_mean_history)
     midpoint_reward = task_settable_env.reward_mean_history[num_rewards // 2]
