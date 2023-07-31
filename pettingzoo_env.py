@@ -114,6 +114,9 @@ class PettingZooEnv(MultiAgentEnv):
 
         self._agent_ids = set(self.env.agents)
 
+        self.reward_mean_history = []
+        self.upgrade_iteration = 0
+
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         info = self.env.reset(seed=seed, options=options)
         return (
@@ -155,6 +158,14 @@ class PettingZooEnv(MultiAgentEnv):
 
     def render(self):
         return self.env.render(self.render_mode)
+        
+    def get_task(self):
+        """Implement this to get the current task (curriculum level)."""
+        return self.env.env.get_task()
+
+    def set_task(self, task):
+        """Implement this to set the task (curriculum level) for this env."""
+        self.env.env.set_task(task)
 
     @property
     def get_sub_environments(self):

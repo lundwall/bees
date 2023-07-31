@@ -13,7 +13,7 @@ import environment as environment
 # import rllib pettingzoo interface
 from pettingzoo_env import PettingZooEnv
 
-EXPERIMENT_NAME = "no_curriculum_20s"
+EXPERIMENT_NAME = "nectar_curriculum_20s"
 RESULTS_DIR = "/itet-stor/mlundwall/net_scratch/ray_results"
 
 # Limit number of cores
@@ -42,8 +42,8 @@ def curriculum_fn(
     # Level 1: Expect rewards between 0.0 and 1.0.
     # Level 2: Expect rewards between 1.0 and 10.0, etc..
     # We will thus raise the level/task each time we hit a new power of 10.0
-    latest_reward = train_results["episode_reward_mean"]
-    latest_iteration = train_results["training_iteration"]
+    latest_reward = train_results.get("episode_reward_mean", 0)
+    latest_iteration = train_results.get("training_iteration", 0)
     task_settable_env.reward_mean_history.append(latest_reward)
     num_rewards = len(task_settable_env.reward_mean_history)
     midpoint_reward = task_settable_env.reward_mean_history[num_rewards // 2]
@@ -53,6 +53,7 @@ def curriculum_fn(
         new_task = current_task + 3
         task_settable_env.reward_mean_history = []
         task_settable_env.upgrade_iteration = latest_iteration
+        print(f"Upgraded to task {new_task}")
         return new_task
     else:
         return current_task
@@ -77,7 +78,7 @@ config = config.environment(
         "ends_when_no_wasps": False,
         "num_bouquets": 1,
         "num_hives": 1,
-        "num_wasps": 3,
+        "num_wasps": 0,
         "observes_rel_pos": False,
         "reward_shaping": False},
     env_task_fn=curriculum_fn

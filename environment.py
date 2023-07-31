@@ -67,9 +67,6 @@ class raw_env(AECEnv):
 
         self.cur_level = 10
 
-        self.reward_mean_history = []
-        self.upgrade_iteration = 0
-
     # Observation space should be defined here.
     # lru_cache allows observation and action spaces to be memoized, reducing clock cycles required to get each agent's space.
     # If your spaces change over time, remove this line (disable caching).
