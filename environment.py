@@ -65,6 +65,11 @@ class raw_env(AECEnv):
         self.observes_rel_pos = observes_rel_pos
         self.reward_shaping = reward_shaping
 
+        self.cur_level = 10
+
+        self.reward_mean_history = []
+        self.upgrade_iteration = 0
+
     # Observation space should be defined here.
     # lru_cache allows observation and action spaces to be memoized, reducing clock cycles required to get each agent's space.
     # If your spaces change over time, remove this line (disable caching).
@@ -176,7 +181,11 @@ class raw_env(AECEnv):
         can be called without issues.
         Here it sets up the state dictionary which is used by step() and the observations dictionary which is used by step() and observe()
         """
-        self.model = Garden(N=10, width=20, height=20, num_hives=self.num_hives, num_bouquets=self.num_bouquets, num_wasps=self.num_wasps, training=True, observes_rel_pos=self.observes_rel_pos)
+        if hasattr(self, "cur_level"):
+            side_size = self.cur_level
+        else:
+            side_size = 20
+        self.model = Garden(N=10, width=side_size, height=side_size, num_hives=self.num_hives, num_bouquets=self.num_bouquets, num_wasps=self.num_wasps, training=True, observes_rel_pos=self.observes_rel_pos)
         self.visualizer = TextGrid(self.model.grid, self.converter)
         self.agents = self.possible_agents[:]
         self.rewards = {agent: 0 for agent in self.agents}
@@ -297,3 +306,11 @@ class raw_env(AECEnv):
             self.render()
 
         return
+    
+    def get_task(self):
+        """Implement this to get the current task (curriculum level)."""
+        return self.cur_level
+
+    def set_task(self, task):
+        """Implement this to set the task (curriculum level) for this env."""
+        self.cur_level = task
