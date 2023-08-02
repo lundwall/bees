@@ -13,7 +13,7 @@ import environment as environment
 # import rllib pettingzoo interface
 from pettingzoo_env import PettingZooEnv
 
-EXPERIMENT_NAME = "nectar_curriculum_20s"
+EXPERIMENT_NAME = "nectar_curriculum_limited_2epw"
 RESULTS_DIR = "/itet-stor/mlundwall/net_scratch/ray_results"
 
 # Limit number of cores
@@ -64,7 +64,7 @@ env_creator = lambda config: environment.env(ends_when_no_wasps=config.get("ends
 register_env('environment', lambda config: PettingZooEnv(env_creator(config)))
 
 config = PPOConfig()
-# config = config.rollouts(num_rollout_workers=2)
+config = config.rollouts(num_rollout_workers=2, num_envs_per_worker=2)
 config = config.training(
     model={
         "custom_model": TorchActionMaskModel,
