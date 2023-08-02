@@ -269,7 +269,7 @@ class raw_env(AECEnv):
                 nbs = bee.model.grid.get_neighborhood(a.pos, False, 1)
                 valid_nbs = [pos for pos in nbs if bee.model.grid.is_cell_empty(pos)]
                 num_blocked = 6 - len(valid_nbs)
-                reward += num_blocked
+                reward += num_blocked/10.0
         
         if self.reward_shaping:
             if prev_wasp_dist is not None and next_wasp_dist is not None :

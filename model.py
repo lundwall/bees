@@ -60,10 +60,11 @@ class Garden(mesa.Model):
             self.grid.move_to_empty(bee)
 
         # Create wasps
-        for _ in range(self.random.randint(1, self.num_wasps)):
-            wasp = Wasp(self.next_id(), self, (0, 0))
-            self.schedule_wasps.add(wasp)
-            self.grid.move_to_empty(wasp)
+        if self.num_wasps > 0:
+            for _ in range(self.random.randint(1, self.num_wasps)):
+                wasp = Wasp(self.next_id(), self, (0, 0))
+                self.schedule_wasps.add(wasp)
+                self.grid.move_to_empty(wasp)
 
         # Create flowers
         self.flowers = []
