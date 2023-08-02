@@ -351,24 +351,28 @@ class Forest(mesa.Agent):
 
 class Wasp(mesa.Agent):
 
+    TIME_TO_SUFFOCATE = 2
+    NUM_TURNS_BETWEEN_MOVES = 3
+
     def __init__(self, unique_id, model, pos):
         super().__init__(unique_id, model)
-        self.can_move = True
         self.pos = pos
-        self.suffocation_time = 0
+        self.cur_suffocation_time = 0
+        self.turn_id = 0
     
     def step(self):
-        if self.can_move:
-            nbs = self.model.grid.get_neighborhood(self.pos, False, 1)
-            valid_nbs = [pos for pos in nbs if self.model.grid.is_cell_empty(pos)]
-            # Wasp dies if it has no 'air' for 3 units of time
-            if len(valid_nbs) == 0:
-                self.suffocation_time += 1
-                if self.suffocation_time >= 3:
-                    self.model.grid.remove_agent(self)
-                    self.model.schedule_wasps.remove(self)
-                return
+        nbs = self.model.grid.get_neighborhood(self.pos, False, 1)
+        valid_nbs = [pos for pos in nbs if self.model.grid.is_cell_empty(pos)]
+        # Wasp dies if it has no 'air' for 3 units of time
+        if len(valid_nbs) == 0:
+            self.cur_suffocation_time += 1
+            if self.cur_suffocation_time >= self.TIME_TO_SUFFOCATE:
+                self.model.grid.remove_agent(self)
+                self.model.schedule_wasps.remove(self)
+            return
             
+        if self.turn_id % self.NUM_TURNS_BETWEEN_MOVES == 0:
             random_nb = self.model.random.choice(valid_nbs)
             self.model.grid.move_agent(self, random_nb)
-        self.can_move = not self.can_move
+
+        self.turn_id += 1

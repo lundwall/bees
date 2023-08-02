@@ -49,8 +49,8 @@ def curriculum_fn(
     midpoint_reward = task_settable_env.reward_mean_history[num_rewards // 2]
     current_task = task_settable_env.get_task()
     # If latest reward is less than 10% off the midpoint reward, then we increase the new task
-    if latest_iteration - task_settable_env.upgrade_iteration > 100 and abs(latest_reward - midpoint_reward) / midpoint_reward < 0.1:
-        new_task = current_task + 3
+    if current_task < 20 and latest_iteration - task_settable_env.upgrade_iteration > 200 and latest_reward < midpoint_reward * 1.1:
+        new_task = current_task + 2
         task_settable_env.reward_mean_history = []
         task_settable_env.upgrade_iteration = latest_iteration
         print(f"Upgraded to task {new_task}")
