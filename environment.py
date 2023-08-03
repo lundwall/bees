@@ -14,14 +14,14 @@ from pettingzoo.utils import agent_selector, wrappers
 
 MAX_ROUNDS = 100
 
-def env(render_mode=None, ends_when_no_wasps=False, num_bouquets=1, num_hives=1, num_wasps=3, observes_rel_pos=False, reward_shaping=False):
+def env(render_mode=None, ends_when_no_wasps=False, side_size=20, num_bouquets=1, num_hives=1, num_wasps=3, observes_rel_pos=False, reward_shaping=False, curriculum_learning=True, cur_schedule=None):
     """
     The env function often wraps the environment in wrappers by default.
     You can find full documentation for these methods
     elsewhere in the developer documentation.
     """
     internal_render_mode = render_mode if render_mode != "ansi" else "human"
-    env = raw_env(render_mode=internal_render_mode, ends_when_no_wasps=ends_when_no_wasps, num_bouquets=num_bouquets, num_hives=num_hives, num_wasps=num_wasps, observes_rel_pos=observes_rel_pos, reward_shaping=reward_shaping)
+    env = raw_env(render_mode=internal_render_mode, ends_when_no_wasps=ends_when_no_wasps, side_size=side_size, num_bouquets=num_bouquets, num_hives=num_hives, num_wasps=num_wasps, observes_rel_pos=observes_rel_pos, reward_shaping=reward_shaping, curriculum_learning=curriculum_learning, cur_schedule=cur_schedule)
     # This wrapper is only for environments which print results to the terminal
     if render_mode == "ansi":
         env = wrappers.CaptureStdoutWrapper(env)
@@ -41,7 +41,7 @@ class raw_env(AECEnv):
 
     metadata = {"render_modes": ["human"], "name": "rps_v2"}
 
-    def __init__(self, render_mode=None, ends_when_no_wasps=False, num_bouquets=1, num_hives=1, num_wasps=3, observes_rel_pos=False, reward_shaping=False):
+    def __init__(self, render_mode=None, ends_when_no_wasps=False, side_size=20, num_bouquets=1, num_hives=1, num_wasps=3, observes_rel_pos=False, reward_shaping=False, curriculum_learning=True, cur_schedule=None):
         """
         The init method takes in environment arguments and
          should define the following attributes:
@@ -64,8 +64,15 @@ class raw_env(AECEnv):
         self.num_wasps = num_wasps
         self.observes_rel_pos = observes_rel_pos
         self.reward_shaping = reward_shaping
-
-        self.cur_level = 10
+        self.curriculum_learning = curriculum_learning
+        if self.curriculum_learning:
+            if cur_schedule is None:
+                self.cur_schedule = [10 + 2*i for i in range(6)]
+            else:
+                self.cur_schedule = cur_schedule
+            self.cur_level = 0
+        else:
+            self.side_size = side_size
 
     # Observation space should be defined here.
     # lru_cache allows observation and action spaces to be memoized, reducing clock cycles required to get each agent's space.
@@ -178,11 +185,9 @@ class raw_env(AECEnv):
         can be called without issues.
         Here it sets up the state dictionary which is used by step() and the observations dictionary which is used by step() and observe()
         """
-        if hasattr(self, "cur_level"):
-            side_size = self.cur_level
-        else:
-            side_size = 20
-        self.model = Garden(N=10, width=side_size, height=side_size, num_hives=self.num_hives, num_bouquets=self.num_bouquets, num_wasps=self.num_wasps, training=True, observes_rel_pos=self.observes_rel_pos)
+        if self.curriculum_learning:
+            self.side_size = self.cur_schedule[self.cur_level]
+        self.model = Garden(N=10, width=self.side_size, height=self.side_size, num_hives=self.num_hives, num_bouquets=self.num_bouquets, num_wasps=self.num_wasps, training=True, observes_rel_pos=self.observes_rel_pos)
         self.visualizer = TextGrid(self.model.grid, self.converter)
         self.agents = self.possible_agents[:]
         self.rewards = {agent: 0 for agent in self.agents}

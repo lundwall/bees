@@ -12,9 +12,11 @@ from ray.air.integrations.wandb import WandbLoggerCallback
 import environment as environment
 # import rllib pettingzoo interface
 from pettingzoo_env import PettingZooEnv
+from ray.rllib.utils.from_config import NotProvided
 
 EXPERIMENT_NAME = "nectar_curriculum_limited_2epw"
 RESULTS_DIR = "/itet-stor/mlundwall/net_scratch/ray_results"
+CURRICULUM_TRAINING = True
 
 # Limit number of cores
 ray.init(num_cpus=16)
@@ -49,8 +51,8 @@ def curriculum_fn(
     midpoint_reward = task_settable_env.reward_mean_history[num_rewards // 2]
     current_task = task_settable_env.get_task()
     # If latest reward is less than 10% off the midpoint reward, then we increase the new task
-    if current_task < 20 and latest_iteration - task_settable_env.upgrade_iteration > 200 and latest_reward < midpoint_reward * 1.1:
-        new_task = current_task + 2
+    if current_task < len(task_settable_env.cur_schedule) - 1 and latest_iteration - task_settable_env.upgrade_iteration > 200 and latest_reward < midpoint_reward * 1.1:
+        new_task = current_task + 1
         task_settable_env.reward_mean_history = []
         task_settable_env.upgrade_iteration = latest_iteration
         print(f"Upgraded to task {new_task}")
@@ -76,12 +78,15 @@ config = config.environment(
     'environment',
     env_config={
         "ends_when_no_wasps": False,
+        "side_size": 20,
         "num_bouquets": 1,
         "num_hives": 1,
         "num_wasps": 0,
         "observes_rel_pos": False,
-        "reward_shaping": False},
-    env_task_fn=curriculum_fn
+        "reward_shaping": False,
+        "curriculum_training": CURRICULUM_TRAINING,
+    },
+    env_task_fn=curriculum_fn if CURRICULUM_TRAINING else NotProvided,
 )
 
 current_best_params = [
