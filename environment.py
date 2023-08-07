@@ -127,8 +127,10 @@ class raw_env(AECEnv):
     # If your spaces change over time, remove this line (disable caching).
     @functools.lru_cache(maxsize=None)
     def action_space(self, agent):
-        # return Tuple((Discrete(7), Box(0.0, 1.0, shape=(8,), dtype=np.float32)))
-        return Discrete(7)
+        if self.comm_learning:
+            return Tuple((Discrete(7), Box(0.0, 1.0, shape=(8,), dtype=np.float32)))
+        else:
+            return Discrete(7)
 
     def converter(self, cell_agent):
         if type(cell_agent) is Bee:

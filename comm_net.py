@@ -21,7 +21,7 @@ class CommunicationNetwork(TorchModelV2, nn.Module):
             nn.ReLU(),
             nn.Linear(64, 64),
             nn.ReLU(),
-            nn.Linear(64, 7)  # 7 possible actions
+            nn.Linear(64, 23)  # 7 possible actions + 16 new-state values (mean + log_std for each of the 8 comm values)
         )
 
         self.value_mlp = nn.Sequential(

@@ -1,4 +1,5 @@
 from gymnasium.spaces import Dict
+import numpy as np
 
 from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 from ray.rllib.models.torch.complex_input_net import ComplexInputNetwork
@@ -55,9 +56,15 @@ class TorchActionMaskModel(TorchModelV2, nn.Module):
             self.no_masking = model_config["custom_model_config"]["no_masking"]
 
     def forward(self, input_dict, state, seq_lens):
+        batch_size = input_dict["obs"]["action_mask"].shape[0]
         # Extract the available actions tensor from the observation.
         action_mask = input_dict["obs"]["action_mask"]
 
+        if self.comm_learning:
+            # Here, two values for each: mean + log_std
+            comm_mask = np.ones((batch_size, 16))
+            action_mask = np.concatenate((action_mask, comm_mask), axis=1)
+            action_mask = torch.from_numpy(action_mask).float()
         # Compute the unmasked logits.
         logits, _ = self.internal_model({"obs": input_dict["obs"]["observations"]})
 

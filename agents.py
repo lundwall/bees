@@ -271,11 +271,11 @@ class Bee(mesa.Agent):
             obs = self.observe()
             action = self.model.algo.compute_single_action(obs)
 
-        # if self.comm_learning:
-        #     move_direction, new_state = action
-        #     self.state = new_state.copy()
-        # else:
-        move_direction = action
+        if self.comm_learning:
+            move_direction, new_state = action
+            self.state = list(new_state.copy())
+        else:
+            move_direction = action
         self.trace.append(move_direction)
         self.trace.popleft()
         if self.pos[0] % 2 == 0:
