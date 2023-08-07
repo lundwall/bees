@@ -17,7 +17,7 @@ class CommunicationNetwork(TorchModelV2, nn.Module):
         )
 
         self.action_mlp = nn.Sequential(
-            nn.Linear(16, 64),
+            nn.Linear(25, 64),
             nn.ReLU(),
             nn.Linear(64, 64),
             nn.ReLU(),
@@ -25,7 +25,7 @@ class CommunicationNetwork(TorchModelV2, nn.Module):
         )
 
         self.value_mlp = nn.Sequential(
-            nn.Linear(16, 64),
+            nn.Linear(25, 64),
             nn.ReLU(),
             nn.Linear(64, 64),
             nn.ReLU(),
@@ -33,19 +33,29 @@ class CommunicationNetwork(TorchModelV2, nn.Module):
         )
 
     def forward(self, input_dict, state, seq_lens):
-        batch_size, seq_len, _ = input_dict['obs'].shape
-        reshaped_obs = input_dict['obs'].reshape(-1, 16)
+        batch_size = input_dict['obs'].shape[0]
+        seq_len = 37  # excluding the extra vector
+
+        s_own = input_dict['obs'][:, 0, :9]  # shape: (batch_size, 9)
+        sequences = input_dict['obs'][:, 1:, :]  # shape: (batch_size, 37, 16)
+
+        # Join all batches together
+        reshaped_sequences = sequences.reshape(-1, 16)
 
         # Pass each 16-value vector through the shared MLP
-        shared_output = self.shared_mlp(reshaped_obs)
+        shared_output = self.shared_mlp(reshaped_sequences)
 
         # Reshape the output back to the original shape and sum along the sequence dimension
+        # (one sum for each batch)
         summed_output = shared_output.view(batch_size, seq_len, -1).sum(dim=1)
 
-        # Pass the summed output through the action MLP
-        action_logits = self.action_mlp(summed_output)
-        # Pass the summed output through the value MLP
-        self._value_out = self.value_mlp(summed_output)
+        # Concatenate with own bee's state
+        concatenated_output = torch.cat([s_own, summed_output], dim=1)  # shape: (batch_size, 25)
+
+        # Pass the summed+concated output through the action MLP
+        action_logits = self.action_mlp(concatenated_output)
+        # Pass the summed+concated output through the value MLP
+        self._value_out = self.value_mlp(concatenated_output)
 
         return action_logits, state
 

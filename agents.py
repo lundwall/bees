@@ -39,7 +39,7 @@ class Bee(mesa.Agent):
         # Sometimes make bee start with full nectar to help training to go towards hive
         if self.model.training and self.model.random.randint(0, 1) == 0:
             self.nectar = self.MAX_NECTAR
-        self.state = [0] * 8
+        self.state = [0.0] * 8
         self.trace = deque([0] * self.TRACE_LENGTH)
         self.trace_locs = deque([pos] * self.TRACE_LENGTH)
         self.rel_pos = {
@@ -83,6 +83,7 @@ class Bee(mesa.Agent):
     def observe(self):
         # (nectar, bee flags, flower nectar, hive location)
         comm_obs = []
+        comm_obs.append(self.state + [1.0 if self.nectar == self.MAX_NECTAR else 0.0] + [0.0 for _ in range(7)])
         obstacles = [[0 for _ in range(7)] for _ in range(7)]
         bee_presence = [[0 for _ in range(7)] for _ in range(7)]
         flower_presence = [[0 for _ in range(7)] for _ in range(7)]
@@ -249,12 +250,9 @@ class Bee(mesa.Agent):
             target_rel_pos = flower_rel_pos
         
         comm_obs = np.array(comm_obs)
-        if len(comm_obs) == 0:
-            # If it's empty, return only the padding
-            comm_obs = np.zeros((37, 16))
-        elif len(comm_obs) < 37:
-                padding = np.zeros((37 - len(comm_obs), 16))
-                comm_obs = np.vstack([comm_obs, padding])
+        if len(comm_obs) < 38:
+            padding = np.zeros((38 - len(comm_obs), 16))
+            comm_obs = np.vstack([comm_obs, padding])
 
         # return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, bee_flags, flower_nectar, hives), "action_mask": action_mask}
         # return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, wasp_rel_pos, hive_rel_pos, flower_rel_pos, map), "action_mask": action_mask}

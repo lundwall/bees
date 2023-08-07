@@ -110,7 +110,7 @@ class raw_env(AECEnv):
         hive_presence = Box(0, 1, shape=(49,), dtype=np.uint8)
         trace_presence = Box(0, 1, shape=(49,), dtype=np.uint8)
 
-        comm_obs = Box(0.0, 1.0, shape=(37,16), dtype=np.float32)
+        comm_obs = Box(0.0, 1.0, shape=(38,16), dtype=np.float32)
 
         if self.comm_learning:
             observation = comm_obs
