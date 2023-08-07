@@ -30,15 +30,16 @@ class Bee(mesa.Agent):
         6: (-1, 0)
     }
 
-    def __init__(self, unique_id, model, pos, observes_rel_pos=False):
+    def __init__(self, unique_id, model, pos, observes_rel_pos=False, comm_learning=True):
         super().__init__(unique_id, model)
         self.pos = pos
         self.nectar = 0
         self.observes_rel_pos = observes_rel_pos
+        self.comm_learning = comm_learning
         # Sometimes make bee start with full nectar to help training to go towards hive
         if self.model.training and self.model.random.randint(0, 1) == 0:
             self.nectar = self.MAX_NECTAR
-        self.state = [0] * 3
+        self.state = [0] * 8
         self.trace = deque([0] * self.TRACE_LENGTH)
         self.trace_locs = deque([pos] * self.TRACE_LENGTH)
         self.rel_pos = {
@@ -69,9 +70,19 @@ class Bee(mesa.Agent):
     
     def sum_rel_pos(self, a_pos, b_pos):
         return (a_pos[0] + b_pos[0], a_pos[1] + b_pos[1])
+
+    def rel_pos_to_cube_pos(self, pos):
+        q = pos[0]
+        r = pos[1] - (pos[0] - (pos[0] & 1)) // 2
+        s = -q - r
+        return (q, r, s)
+
+    def normalize_cube_pos(self, pos):
+        return [c/10.0 + 0.5 for c in list(pos)]
     
     def observe(self):
         # (nectar, bee flags, flower nectar, hive location)
+        comm_obs = []
         obstacles = [[0 for _ in range(7)] for _ in range(7)]
         bee_presence = [[0 for _ in range(7)] for _ in range(7)]
         flower_presence = [[0 for _ in range(7)] for _ in range(7)]
@@ -86,6 +97,9 @@ class Bee(mesa.Agent):
             if len(agents) != 0:
                 agent = agents[0]
                 agent_coor = self.pos_to_rel_pos(agent.pos)
+                agent_cube_coor = list(self.rel_pos_to_cube_pos(agent_coor))
+                # Normalize to be between 0 and 1
+                agent_cube_coor = self.normalize_cube_pos(agent_cube_coor)
                 agent_coor = (agent_coor[0] + 3, agent_coor[1] + 3)
                 if type(agent) is Flower:
                     flower_rel_pos = self.pos_to_rel_pos(agent.pos)
@@ -99,6 +113,10 @@ class Bee(mesa.Agent):
                     map[agent_coor[0]][agent_coor[1]] = agent.nectar
                     flower_presence[agent_coor[0]][agent_coor[1]] = 1
                     flower_nectar[agent_coor[0]][agent_coor[1]] = agent.nectar
+                    comm_state = [0.0] * 8
+                    comm_ohe = [0.0] * 5
+                    comm_ohe[0] = 1.0
+                    comm_obs.append(comm_ohe + comm_state + agent_cube_coor)
                 elif type(agent) is type(self):
                     map[agent_coor[0]][agent_coor[1]] = -2
                     bee_presence[agent_coor[0]][agent_coor[1]] = 1
@@ -128,17 +146,29 @@ class Bee(mesa.Agent):
                     if other_wasp_rel_pos != agent_rel_pos:
                         if self.rel_pos["wasp"] == (0, 0) or self.dist_to_rel_pos(other_wasp_rel_pos) < self.dist_to_rel_pos(self.rel_pos["wasp"]):
                             self.rel_pos["wasp"] = other_wasp_rel_pos
+                    comm_state = agent.state
+                    comm_ohe = [0.0] * 5
+                    comm_ohe[1] = 1.0
+                    comm_obs.append(comm_ohe + comm_state + agent_cube_coor)
                 elif type(agent) is Hive:
                     # hives[agent_coor[0]][agent_coor[1]] = 1
                     map[agent_coor[0]][agent_coor[1]] = -3
                     hive_presence[agent_coor[0]][agent_coor[1]] = 1
                     hive_rel_pos = self.pos_to_rel_pos(agent.pos)
                     self.rel_pos["hive"] = hive_rel_pos
+                    comm_state = [0.0] * 8
+                    comm_ohe = [0.0] * 5
+                    comm_ohe[2] = 1.0
+                    comm_obs.append(comm_ohe + comm_state + agent_cube_coor)
                 elif type(agent) is Wasp:
                     map[agent_coor[0]][agent_coor[1]] = -4
                     wasp_presence[agent_coor[0]][agent_coor[1]] = 1
                     wasp_rel_pos = self.pos_to_rel_pos(agent.pos)
                     self.rel_pos["wasp"] = wasp_rel_pos
+                    comm_state = [0.0] * 8
+                    comm_ohe = [0.0] * 5
+                    comm_ohe[3] = 1.0
+                    comm_obs.append(comm_ohe + comm_state + agent_cube_coor)
                 elif type(agent) is Forest:
                     map[agent_coor[0]][agent_coor[1]] = -5
                     obstacles[agent_coor[0]][agent_coor[1]] = 1
@@ -153,10 +183,17 @@ class Bee(mesa.Agent):
         # Add trace rel locs to map
         for t in self.trace_locs:
             rel_t = self.pos_to_rel_pos(t)
+            trace_cube_coor = list(self.rel_pos_to_cube_pos(rel_t))
+            # Normalize to be between 0 and 1
+            trace_cube_coor = self.normalize_cube_pos(trace_cube_coor)
             rel_t = (rel_t[0] + 3, rel_t[1] + 3)
             if rel_t[0] >= 0 and rel_t[0] < 7 and rel_t[1] >= 0 and rel_t[1] < 7:
                 map[rel_t[0]][rel_t[1]] = -1
                 trace_presence[rel_t[0]][rel_t[1]] = 1
+                comm_state = [0.0] * 8
+                comm_ohe = [0.0] * 5
+                comm_ohe[4] = 1.0
+                comm_obs.append(comm_ohe + comm_state + trace_cube_coor)
 
         # Add edges of map
         if self.pos[0] < 3:
@@ -210,13 +247,24 @@ class Bee(mesa.Agent):
             target_rel_pos = hive_rel_pos
         else:
             target_rel_pos = flower_rel_pos
+        
+        comm_obs = np.array(comm_obs)
+        if len(comm_obs) == 0:
+            # If it's empty, return only the padding
+            comm_obs = np.zeros((37, 16))
+        elif len(comm_obs) < 37:
+                padding = np.zeros((37 - len(comm_obs), 16))
+                comm_obs = np.vstack([comm_obs, padding])
 
         # return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, bee_flags, flower_nectar, hives), "action_mask": action_mask}
         # return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, wasp_rel_pos, hive_rel_pos, flower_rel_pos, map), "action_mask": action_mask}
-        if self.observes_rel_pos:
-            observations = {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, wasp_rel_pos, hive_rel_pos, flower_rel_pos, obstacles, bee_presence, flower_presence, flower_nectar, wasp_presence, hive_presence, trace_presence), "action_mask": action_mask}
+        if self.comm_learning:
+            observations = {"observations": comm_obs, "action_mask": action_mask}
         else:
-            observations = {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, obstacles, bee_presence, flower_presence, flower_nectar, wasp_presence, hive_presence, trace_presence), "action_mask": action_mask}
+            if self.observes_rel_pos:
+                observations = {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, wasp_rel_pos, hive_rel_pos, flower_rel_pos, obstacles, bee_presence, flower_presence, flower_nectar, wasp_presence, hive_presence, trace_presence), "action_mask": action_mask}
+            else:
+                observations = {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, obstacles, bee_presence, flower_presence, flower_nectar, wasp_presence, hive_presence, trace_presence), "action_mask": action_mask}
         return observations
         # return {"observations": (target_rel_pos, flower_nectar), "action_mask": action_mask}
             
@@ -225,10 +273,10 @@ class Bee(mesa.Agent):
             obs = self.observe()
             action = self.model.algo.compute_single_action(obs)
 
-        # move_direction, new_state = action
-        # if new_state >= 0 and new_state <= 16_777_215:
-        #     new_state = [(new_state >> 16) & 0xff, (new_state >> 8) & 0xff, (new_state) & 0xff]
+        # if self.comm_learning:
+        #     move_direction, new_state = action
         #     self.state = new_state.copy()
+        # else:
         move_direction = action
         self.trace.append(move_direction)
         self.trace.popleft()

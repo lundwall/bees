@@ -14,9 +14,11 @@ import environment as environment
 from pettingzoo_env import PettingZooEnv
 from ray.rllib.utils.from_config import NotProvided
 
-EXPERIMENT_NAME = "nectar_curriculum_limited_2epw"
+EXPERIMENT_NAME = "comm_curr_nectar"
 RESULTS_DIR = "/itet-stor/mlundwall/net_scratch/ray_results"
-CURRICULUM_TRAINING = True
+LOG_TO_WANDB = True
+CURRICULUM_LEARNING = True
+COMM_LEARNING = True
 
 # Limit number of cores
 ray.init(num_cpus=16)
@@ -51,7 +53,7 @@ def curriculum_fn(
     midpoint_reward = task_settable_env.reward_mean_history[num_rewards // 2]
     current_task = task_settable_env.get_task()
     # If latest reward is less than 10% off the midpoint reward, then we increase the new task
-    if current_task < len(task_settable_env.cur_schedule) - 1 and latest_iteration - task_settable_env.upgrade_iteration > 200 and latest_reward < midpoint_reward * 1.1:
+    if current_task < 5 and latest_iteration - task_settable_env.upgrade_iteration > 200 and latest_reward < midpoint_reward * 1.1:
         new_task = current_task + 1
         task_settable_env.reward_mean_history = []
         task_settable_env.upgrade_iteration = latest_iteration
@@ -61,7 +63,7 @@ def curriculum_fn(
         return current_task
 
 # define how to make the environment. This way takes an optional environment config
-env_creator = lambda config: environment.env(ends_when_no_wasps=config.get("ends_when_no_wasps", False), num_bouquets=config.get("num_bouquets", 1), num_hives=config.get("num_hives", 1), num_wasps=config.get("num_wasps", 3), observes_rel_pos=config.get("observes_rel_pos", False), reward_shaping=config.get("reward_shaping", False))
+env_creator = lambda config: environment.env(ends_when_no_wasps=config.get("ends_when_no_wasps", False), side_size=config.get("side_size", 20), num_bouquets=config.get("num_bouquets", 1), num_hives=config.get("num_hives", 1), num_wasps=config.get("num_wasps", 3), observes_rel_pos=config.get("observes_rel_pos", False), reward_shaping=config.get("reward_shaping", False), curriculum_learning=config.get("curriculum_learning", True), comm_learning=config.get("comm_learning", True))
 # register that way to make the environment under an rllib name
 register_env('environment', lambda config: PettingZooEnv(env_creator(config)))
 
@@ -70,6 +72,7 @@ config = config.rollouts(num_rollout_workers=2, num_envs_per_worker=2)
 config = config.training(
     model={
         "custom_model": TorchActionMaskModel,
+        "custom_model_config": {"comm_learning": COMM_LEARNING},
     },
     #lr=tune.uniform(1e-5, 1e-4),
     #train_batch_size=tune.randint(1_000, 10_000),
@@ -84,9 +87,10 @@ config = config.environment(
         "num_wasps": 0,
         "observes_rel_pos": False,
         "reward_shaping": False,
-        "curriculum_training": CURRICULUM_TRAINING,
+        "curriculum_learning": CURRICULUM_LEARNING,
+        "comm_learning": COMM_LEARNING,
     },
-    env_task_fn=curriculum_fn if CURRICULUM_TRAINING else NotProvided,
+    env_task_fn=curriculum_fn if CURRICULUM_LEARNING else NotProvided,
 )
 
 current_best_params = [
@@ -103,7 +107,7 @@ tuner = tune.Tuner(
         name=EXPERIMENT_NAME,
         local_dir=RESULTS_DIR,
         stop={"training_iteration": 2000},
-        callbacks=[WandbLoggerCallback(project="bees", api_key_file="~/.wandb_api_key", log_config=True)],
+        callbacks=[WandbLoggerCallback(project="bees", api_key_file="~/.wandb_api_key", log_config=True)] if LOG_TO_WANDB else None,
         checkpoint_config=air.CheckpointConfig(
             checkpoint_frequency=100,
         ),
@@ -122,7 +126,7 @@ tuner = tune.Tuner(
     param_space=config.to_dict(),
 )
 results = tuner.fit()
-print("Best hyperparameters found were: ", results.get_best_result().config)
+print("Best hyperparameters found were: ", results.get_best_result(metric="episode_reward_mean", mode="max").config)
 
 # Train without tuning
 # algo = PPOConfig().environment('environment').build()

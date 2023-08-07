@@ -14,14 +14,14 @@ from pettingzoo.utils import agent_selector, wrappers
 
 MAX_ROUNDS = 100
 
-def env(render_mode=None, ends_when_no_wasps=False, side_size=20, num_bouquets=1, num_hives=1, num_wasps=3, observes_rel_pos=False, reward_shaping=False, curriculum_learning=True, cur_schedule=None):
+def env(render_mode=None, ends_when_no_wasps=False, side_size=20, num_bouquets=1, num_hives=1, num_wasps=3, observes_rel_pos=False, reward_shaping=False, curriculum_learning=True, cur_schedule=None, comm_learning=True):
     """
     The env function often wraps the environment in wrappers by default.
     You can find full documentation for these methods
     elsewhere in the developer documentation.
     """
     internal_render_mode = render_mode if render_mode != "ansi" else "human"
-    env = raw_env(render_mode=internal_render_mode, ends_when_no_wasps=ends_when_no_wasps, side_size=side_size, num_bouquets=num_bouquets, num_hives=num_hives, num_wasps=num_wasps, observes_rel_pos=observes_rel_pos, reward_shaping=reward_shaping, curriculum_learning=curriculum_learning, cur_schedule=cur_schedule)
+    env = raw_env(render_mode=internal_render_mode, ends_when_no_wasps=ends_when_no_wasps, side_size=side_size, num_bouquets=num_bouquets, num_hives=num_hives, num_wasps=num_wasps, observes_rel_pos=observes_rel_pos, reward_shaping=reward_shaping, curriculum_learning=curriculum_learning, cur_schedule=cur_schedule, comm_learning=comm_learning)
     # This wrapper is only for environments which print results to the terminal
     if render_mode == "ansi":
         env = wrappers.CaptureStdoutWrapper(env)
@@ -41,7 +41,7 @@ class raw_env(AECEnv):
 
     metadata = {"render_modes": ["human"], "name": "rps_v2"}
 
-    def __init__(self, render_mode=None, ends_when_no_wasps=False, side_size=20, num_bouquets=1, num_hives=1, num_wasps=3, observes_rel_pos=False, reward_shaping=False, curriculum_learning=True, cur_schedule=None):
+    def __init__(self, render_mode=None, ends_when_no_wasps=False, side_size=20, num_bouquets=1, num_hives=1, num_wasps=3, observes_rel_pos=False, reward_shaping=False, curriculum_learning=True, cur_schedule=None, comm_learning=True):
         """
         The init method takes in environment arguments and
          should define the following attributes:
@@ -73,6 +73,7 @@ class raw_env(AECEnv):
             self.cur_level = 0
         else:
             self.side_size = side_size
+        self.comm_learning = comm_learning
 
     # Observation space should be defined here.
     # lru_cache allows observation and action spaces to be memoized, reducing clock cycles required to get each agent's space.
@@ -109,10 +110,15 @@ class raw_env(AECEnv):
         hive_presence = Box(0, 1, shape=(49,), dtype=np.uint8)
         trace_presence = Box(0, 1, shape=(49,), dtype=np.uint8)
 
-        if self.observes_rel_pos:
-            observation = Tuple((nectar, wasp, hive, flower, obstacles, bee_presence, flower_presence, flower_nectar, wasp_presence, hive_presence, trace_presence))
+        comm_obs = Box(0.0, 1.0, shape=(37,16), dtype=np.float32)
+
+        if self.comm_learning:
+            observation = comm_obs
         else:
-            observation = Tuple((nectar, obstacles, bee_presence, flower_presence, flower_nectar, wasp_presence, hive_presence, trace_presence))
+            if self.observes_rel_pos:
+                observation = Tuple((nectar, wasp, hive, flower, obstacles, bee_presence, flower_presence, flower_nectar, wasp_presence, hive_presence, trace_presence))
+            else:
+                observation = Tuple((nectar, obstacles, bee_presence, flower_presence, flower_nectar, wasp_presence, hive_presence, trace_presence))
 
         action_mask = Box(0, 1, shape=(7,), dtype=np.int8)
         return Dict({'observations': observation, 'action_mask': action_mask})
@@ -121,8 +127,7 @@ class raw_env(AECEnv):
     # If your spaces change over time, remove this line (disable caching).
     @functools.lru_cache(maxsize=None)
     def action_space(self, agent):
-        # return Tuple((Discrete(6), Discrete(16_777_216)))
-        # return Tuple((Discrete(6), Discrete(256)))
+        # return Tuple((Discrete(7), Box(0.0, 1.0, shape=(8,), dtype=np.float32)))
         return Discrete(7)
 
     def converter(self, cell_agent):
@@ -187,7 +192,7 @@ class raw_env(AECEnv):
         """
         if self.curriculum_learning:
             self.side_size = self.cur_schedule[self.cur_level]
-        self.model = Garden(N=10, width=self.side_size, height=self.side_size, num_hives=self.num_hives, num_bouquets=self.num_bouquets, num_wasps=self.num_wasps, training=True, observes_rel_pos=self.observes_rel_pos)
+        self.model = Garden(N=10, width=self.side_size, height=self.side_size, num_hives=self.num_hives, num_bouquets=self.num_bouquets, num_wasps=self.num_wasps, training=True, observes_rel_pos=self.observes_rel_pos, comm_learning=self.comm_learning)
         self.visualizer = TextGrid(self.model.grid, self.converter)
         self.agents = self.possible_agents[:]
         self.rewards = {agent: 0 for agent in self.agents}
