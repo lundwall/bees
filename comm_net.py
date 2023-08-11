@@ -12,12 +12,12 @@ class CommunicationNetwork(TorchModelV2, nn.Module):
             nn.ReLU(),
             nn.Linear(64, 64),
             nn.ReLU(),
-            nn.Linear(64, 16),
+            nn.Linear(64, 32),
             nn.ReLU()
         )
 
         self.action_mlp = nn.Sequential(
-            nn.Linear(25, 64),
+            nn.Linear(41, 64), # 41 = 32 (embedding) + 9 (s_own)
             nn.ReLU(),
             nn.Linear(64, 64),
             nn.ReLU(),
@@ -25,7 +25,7 @@ class CommunicationNetwork(TorchModelV2, nn.Module):
         )
 
         self.value_mlp = nn.Sequential(
-            nn.Linear(25, 64),
+            nn.Linear(41, 64),
             nn.ReLU(),
             nn.Linear(64, 64),
             nn.ReLU(),

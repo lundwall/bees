@@ -14,8 +14,9 @@ import environment as environment
 from pettingzoo_env import PettingZooEnv
 from ray.rllib.utils.from_config import NotProvided
 
-EXPERIMENT_NAME = "comm_full_nectar"
+EXPERIMENT_NAME = "comm_biggerembeddings_nectar"
 RESULTS_DIR = "/itet-stor/mlundwall/net_scratch/ray_results"
+RESTORE_CHECKPOINT = ""
 LOG_TO_WANDB = True
 CURRICULUM_LEARNING = False
 COMM_LEARNING = True
@@ -125,8 +126,8 @@ tuner = tune.Tuner(
     ),
     param_space=config.to_dict(),
     _tuner_kwargs={
-        "restore": "/itet-stor/mlundwall/net_scratch/ray_results/comm_full_nectar/PPO_environment_39a95_00000_0_2023-08-07_05-48-09/checkpoint_002000",
-    },
+        "restore": RESTORE_CHECKPOINT
+    } if RESTORE_CHECKPOINT else None,
 )
 # tuner = tuner.restore(path="/itet-stor/mlundwall/net_scratch/ray_results/comm_full_nectar", trainable="PPO", )
 # tune.run("PPO", config=config, checkpoint_freq=1000, stop={"training_iteration": 6000}, restore="/itet-stor/mlundwall/net_scratch/ray_results/comm_full_nectar", resume=True)
