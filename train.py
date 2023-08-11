@@ -125,8 +125,8 @@ tuner = tune.Tuner(
     ),
     param_space=config.to_dict(),
 )
-# results = tuner.fit()
 results = tuner.restore(path="/itet-stor/mlundwall/net_scratch/ray_results/comm_full_nectar", trainable="PPO", )
+results = tuner.fit()
 print("Best hyperparameters found were: ", results.get_best_result(metric="episode_reward_mean", mode="max").config)
 
 # Train without tuning
