@@ -125,7 +125,7 @@ tuner = tune.Tuner(
     ),
     param_space=config.to_dict(),
     _tuner_kwargs={
-        "restore": "/itet-stor/mlundwall/net_scratch/ray_results/comm_full_nectar",
+        "restore": "/itet-stor/mlundwall/net_scratch/ray_results/comm_full_nectar/PPO_environment_39a95_00000_0_2023-08-07_05-48-09/checkpoint_002000",
     },
 )
 # tuner = tuner.restore(path="/itet-stor/mlundwall/net_scratch/ray_results/comm_full_nectar", trainable="PPO", )
