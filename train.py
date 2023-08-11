@@ -124,8 +124,12 @@ tuner = tune.Tuner(
         #),
     ),
     param_space=config.to_dict(),
+    _tuner_kwargs={
+        "restore": "/itet-stor/mlundwall/net_scratch/ray_results/comm_full_nectar",
+    },
 )
-results = tuner.restore(path="/itet-stor/mlundwall/net_scratch/ray_results/comm_full_nectar", trainable="PPO", )
+# tuner = tuner.restore(path="/itet-stor/mlundwall/net_scratch/ray_results/comm_full_nectar", trainable="PPO", )
+# tune.run("PPO", config=config, checkpoint_freq=1000, stop={"training_iteration": 6000}, restore="/itet-stor/mlundwall/net_scratch/ray_results/comm_full_nectar", resume=True)
 results = tuner.fit()
 print("Best hyperparameters found were: ", results.get_best_result(metric="episode_reward_mean", mode="max").config)
 
