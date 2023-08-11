@@ -14,10 +14,10 @@ import environment as environment
 from pettingzoo_env import PettingZooEnv
 from ray.rllib.utils.from_config import NotProvided
 
-EXPERIMENT_NAME = "comm_curr_nectar"
+EXPERIMENT_NAME = "comm_full_nectar"
 RESULTS_DIR = "/itet-stor/mlundwall/net_scratch/ray_results"
 LOG_TO_WANDB = True
-CURRICULUM_LEARNING = True
+CURRICULUM_LEARNING = False
 COMM_LEARNING = True
 
 # Limit number of cores
@@ -106,10 +106,10 @@ tuner = tune.Tuner(
     run_config=air.RunConfig(
         name=EXPERIMENT_NAME,
         local_dir=RESULTS_DIR,
-        stop={"training_iteration": 2000},
+        stop={"training_iteration": 6000},
         callbacks=[WandbLoggerCallback(project="bees", api_key_file="~/.wandb_api_key", log_config=True)] if LOG_TO_WANDB else None,
         checkpoint_config=air.CheckpointConfig(
-            checkpoint_frequency=100,
+            checkpoint_frequency=1000,
         ),
     ),
     tune_config=tune.TuneConfig(
@@ -125,7 +125,8 @@ tuner = tune.Tuner(
     ),
     param_space=config.to_dict(),
 )
-results = tuner.fit()
+# results = tuner.fit()
+results = tuner.restore(path="/itet-stor/mlundwall/net_scratch/ray_results/comm_full_nectar", trainable="PPO", )
 print("Best hyperparameters found were: ", results.get_best_result(metric="episode_reward_mean", mode="max").config)
 
 # Train without tuning

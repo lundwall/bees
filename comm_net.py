@@ -34,13 +34,14 @@ class CommunicationNetwork(TorchModelV2, nn.Module):
 
     def forward(self, input_dict, state, seq_lens):
         batch_size = input_dict['obs'].shape[0]
-        seq_len = 37  # excluding the extra vector
+        seq_len = 37  # excluding s_own
 
+        # First vector in obs: s_own (8 values) | nectar_own (1 value)
         s_own = input_dict['obs'][:, 0, :9]  # shape: (batch_size, 9)
         sequences = input_dict['obs'][:, 1:, :]  # shape: (batch_size, 37, 16)
 
         # Join all batches together
-        reshaped_sequences = sequences.reshape(-1, 16)
+        reshaped_sequences = sequences.reshape(-1, 16) # shape: (batch_size * 37, 16)
 
         # Pass each 16-value vector through the shared MLP
         shared_output = self.shared_mlp(reshaped_sequences)
@@ -50,7 +51,7 @@ class CommunicationNetwork(TorchModelV2, nn.Module):
         summed_output = shared_output.view(batch_size, seq_len, -1).sum(dim=1)
 
         # Concatenate with own bee's state
-        concatenated_output = torch.cat([s_own, summed_output], dim=1)  # shape: (batch_size, 25)
+        concatenated_output = torch.cat([summed_output, s_own], dim=1)  # shape: (batch_size, 25)
 
         # Pass the summed+concated output through the action MLP
         action_logits = self.action_mlp(concatenated_output)
