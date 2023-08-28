@@ -14,14 +14,14 @@ from pettingzoo.utils import agent_selector, wrappers
 
 MAX_ROUNDS = 100
 
-def env(render_mode=None, ends_when_no_wasps=False, side_size=20, num_bouquets=1, num_hives=1, num_wasps=3, observes_rel_pos=False, reward_shaping=False, curriculum_learning=True, cur_schedule=None, comm_learning=True):
+def env(render_mode=None, game_config={}, training_config={}):
     """
     The env function often wraps the environment in wrappers by default.
     You can find full documentation for these methods
     elsewhere in the developer documentation.
     """
     internal_render_mode = render_mode if render_mode != "ansi" else "human"
-    env = raw_env(render_mode=internal_render_mode, ends_when_no_wasps=ends_when_no_wasps, side_size=side_size, num_bouquets=num_bouquets, num_hives=num_hives, num_wasps=num_wasps, observes_rel_pos=observes_rel_pos, reward_shaping=reward_shaping, curriculum_learning=curriculum_learning, cur_schedule=cur_schedule, comm_learning=comm_learning)
+    env = raw_env(render_mode=internal_render_mode, game_config=game_config, training_config=training_config)
     # This wrapper is only for environments which print results to the terminal
     if render_mode == "ansi":
         env = wrappers.CaptureStdoutWrapper(env)
@@ -41,7 +41,7 @@ class raw_env(AECEnv):
 
     metadata = {"render_modes": ["human"], "name": "rps_v2"}
 
-    def __init__(self, render_mode=None, ends_when_no_wasps=False, side_size=20, num_bouquets=1, num_hives=1, num_wasps=3, observes_rel_pos=False, reward_shaping=False, curriculum_learning=True, cur_schedule=None, comm_learning=True):
+    def __init__(self, render_mode=None, game_config={}, training_config={}):
         """
         The init method takes in environment arguments and
          should define the following attributes:
@@ -54,26 +54,26 @@ class raw_env(AECEnv):
 
         These attributes should not be changed after initialization.
         """
-        self.possible_agents = [f"bee_{i}" for i in range(10)]
+        # N is the number of bees
+        self.N = game_config.get("N", 10)
+        self.possible_agents = [f"bee_{i}" for i in range(self.N)]
 
         self.render_mode = render_mode
 
-        self.ends_when_no_wasps = ends_when_no_wasps
-        self.num_bouquets = num_bouquets
-        self.num_hives = num_hives
-        self.num_wasps = num_wasps
-        self.observes_rel_pos = observes_rel_pos
-        self.reward_shaping = reward_shaping
-        self.curriculum_learning = curriculum_learning
+        self.ends_when_no_wasps = game_config.get("ends_when_no_wasps", False)
+        self.num_bouquets = game_config.get("num_bouquets", 1)
+        self.num_hives = game_config.get("num_hives", 1)
+        self.num_wasps = game_config.get("num_wasps", 3)
+
+        self.observes_rel_pos = training_config.get("observes_rel_pos", False)
+        self.reward_shaping = training_config.get("reward_shaping", False)
+        self.curriculum_learning = training_config.get("curriculum_learning", False)
         if self.curriculum_learning:
-            if cur_schedule is None:
-                self.cur_schedule = [10 + 2*i for i in range(6)]
-            else:
-                self.cur_schedule = cur_schedule
+            self.cur_schedule = training_config.get("cur_schedule", [10 + 2*i for i in range(6)])
             self.cur_level = 0
         else:
-            self.side_size = side_size
-        self.comm_learning = comm_learning
+            self.side_size = game_config.get("side_size", 20)
+        self.comm_learning = training_config.get("comm_learning", False)
 
     # Observation space should be defined here.
     # lru_cache allows observation and action spaces to be memoized, reducing clock cycles required to get each agent's space.
@@ -139,6 +139,8 @@ class raw_env(AECEnv):
             return 'F'
         elif type(cell_agent) is Hive:
             return 'H'
+        elif type(cell_agent) is Wasp:
+            return 'W'
 
     def render(self):
         """
@@ -194,7 +196,7 @@ class raw_env(AECEnv):
         """
         if self.curriculum_learning:
             self.side_size = self.cur_schedule[self.cur_level]
-        self.model = Garden(N=10, width=self.side_size, height=self.side_size, num_hives=self.num_hives, num_bouquets=self.num_bouquets, num_wasps=self.num_wasps, training=True, observes_rel_pos=self.observes_rel_pos, comm_learning=self.comm_learning)
+        self.model = Garden(N=self.N, width=self.side_size, height=self.side_size, num_hives=self.num_hives, num_bouquets=self.num_bouquets, num_wasps=self.num_wasps, training=True, observes_rel_pos=self.observes_rel_pos, comm_learning=self.comm_learning)
         self.visualizer = TextGrid(self.model.grid, self.converter)
         self.agents = self.possible_agents[:]
         self.rewards = {agent: 0 for agent in self.agents}
@@ -258,9 +260,10 @@ class raw_env(AECEnv):
         if bee.rel_pos["wasp"] != (0, 0):
             prev_wasp_dist = bee.dist_to_rel_pos(bee.rel_pos["wasp"])
         
+        # Perform the bee's step
         bee.step(action)
 
-        # Get next state 'value'
+        # Get next state 'value', to compare with previous state
         next_nectar = bee.nectar
         next_flower_dist = None
         if bee.rel_pos["flower"] != (0, 0):
@@ -309,6 +312,7 @@ class raw_env(AECEnv):
 
         # Adds .rewards to ._cumulative_rewards
         self._accumulate_rewards()
+        # Make dead bees step next
         self._deads_step_first()
 
         if self.render_mode == "human":

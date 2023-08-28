@@ -59,7 +59,7 @@ class Garden(mesa.Model):
             self.schedule_bees.add(bee)
             self.grid.move_to_empty(bee)
 
-        # Create wasps
+        # Create wasps (random number of wasps between 1 and self.num_wasps)
         if self.num_wasps > 0:
             for _ in range(self.random.randint(1, self.num_wasps)):
                 wasp = Wasp(self.next_id(), self, (0, 0))

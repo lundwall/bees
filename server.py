@@ -26,11 +26,11 @@ def Bees_portrayal(agent):
 
     return {}
 
-SIDE_SIZE = 10
+SIDE_SIZE = 20
 
 canvas_element = CanvasHexGrid(Bees_portrayal, SIDE_SIZE, SIDE_SIZE, 600, 600)
 
 server = ModularServer(
-    Garden, [canvas_element], "Bee Garden", model_params={"N": 10, "width": SIDE_SIZE, "height": SIDE_SIZE, "num_hives": 1, "num_bouquets": 1, "num_forests": 0, "num_wasps": 0, "seed": 5, "rl": True, "training_checkpoint": "/Users/marclundwall/ray_results/nectar_curriculum_limited_2epw_500"}
+    Garden, [canvas_element], "Bee Garden", model_params={"N": 10, "width": SIDE_SIZE, "height": SIDE_SIZE, "num_hives": 1, "num_bouquets": 1, "num_forests": 0, "num_wasps": 0, "rl": True, "training_checkpoint": "/Users/marclundwall/ray_results/comm_e128_h256_nectar"}
 )
 # server.launch()

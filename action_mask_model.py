@@ -3,7 +3,7 @@ import numpy as np
 
 from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 from ray.rllib.models.torch.complex_input_net import ComplexInputNetwork
-from comm_net import CommunicationNetwork
+from comm_net import CommunicationNetwork, CommunicationAttentionNetwork
 from ray.rllib.utils.framework import try_import_tf, try_import_torch
 from ray.rllib.utils.torch_utils import FLOAT_MIN
 
@@ -21,6 +21,10 @@ class TorchActionMaskModel(TorchModelV2, nn.Module):
         model_config,
         name,
         comm_learning=False,
+        comm_size=8,
+        embedding_size=16,
+        hidden_size=64,
+        with_attn=False,
         **kwargs,
     ):
         self.comm_learning = comm_learning
@@ -38,17 +42,36 @@ class TorchActionMaskModel(TorchModelV2, nn.Module):
         nn.Module.__init__(self)
 
         if self.comm_learning:
-            network = CommunicationNetwork
+            if with_attn:
+                self.internal_model = CommunicationAttentionNetwork(
+                    orig_space["observations"],
+                    action_space,
+                    num_outputs,
+                    model_config,
+                    name + "_internal",
+                    comm_size=comm_size,
+                    embedding_size=embedding_size,
+                    hidden_size=hidden_size,
+                )
+            else:
+                self.internal_model = CommunicationNetwork(
+                    orig_space["observations"],
+                    action_space,
+                    num_outputs,
+                    model_config,
+                    name + "_internal",
+                    comm_size=comm_size,
+                    embedding_size=embedding_size,
+                    hidden_size=hidden_size,
+                )
         else:
-            network = ComplexInputNetwork
-
-        self.internal_model = network(
-            orig_space["observations"],
-            action_space,
-            num_outputs,
-            model_config,
-            name + "_internal",
-        )
+                self.internal_model = ComplexInputNetwork(
+                    orig_space["observations"],
+                    action_space,
+                    num_outputs,
+                    model_config,
+                    name + "_internal",
+                )
 
         # disable action masking --> will likely lead to invalid actions
         self.no_masking = False

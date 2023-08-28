@@ -20,6 +20,7 @@ RESTORE_CHECKPOINT = ""
 LOG_TO_WANDB = True
 CURRICULUM_LEARNING = False
 COMM_LEARNING = True
+WITH_ATTN = False
 
 # Limit number of cores
 ray.init(num_cpus=16)
@@ -27,33 +28,17 @@ ray.init(num_cpus=16)
 def curriculum_fn(
     train_results: dict, task_settable_env: TaskSettableEnv, env_ctx: EnvContext
 ) -> TaskType:
-    """Function returning a possibly new task to set `task_settable_env` to.
-
-    Args:
-        train_results: The train results returned by Algorithm.train().
-        task_settable_env: A single TaskSettableEnv object
-            used inside any worker and at any vector position. Use `env_ctx`
-            to get the worker_index, vector_index, and num_workers.
-        env_ctx: The env context object (i.e. env's config dict
-            plus properties worker_index, vector_index and num_workers) used
-            to setup the `task_settable_env`.
-
-    Returns:
-        TaskType: The task to set the env to. This may be the same as the
-            current one.
-    """
-    # Our env supports tasks 1 (default) to 5.
-    # With each task, rewards get scaled up by a factor of 10, such that:
-    # Level 1: Expect rewards between 0.0 and 1.0.
-    # Level 2: Expect rewards between 1.0 and 10.0, etc..
-    # We will thus raise the level/task each time we hit a new power of 10.0
+    """Function returning the new 'level' to set `task_settable_env` to."""
     latest_reward = train_results["episode_reward_mean"]
+    # 4000 timesteps per iteration
     latest_iteration = train_results["timesteps_total"] // 4000
+    # We store/get the mean reward history in the environment, otherwise we don't have access to it
     task_settable_env.reward_mean_history.append(latest_reward)
     num_rewards = len(task_settable_env.reward_mean_history)
     midpoint_reward = task_settable_env.reward_mean_history[num_rewards // 2]
     current_task = task_settable_env.get_task()
-    # If latest reward is less than 10% off the midpoint reward, then we increase the new task
+    # If latest reward is less than 10% off the midpoint reward,
+    # then we increase the new task
     if current_task < 5 and latest_iteration - task_settable_env.upgrade_iteration > 200 and latest_reward < midpoint_reward * 1.1:
         new_task = current_task + 1
         task_settable_env.reward_mean_history = []
@@ -63,8 +48,22 @@ def curriculum_fn(
     else:
         return current_task
 
-# define how to make the environment. This way takes an optional environment config
-env_creator = lambda config: environment.env(ends_when_no_wasps=config.get("ends_when_no_wasps", False), side_size=config.get("side_size", 20), num_bouquets=config.get("num_bouquets", 1), num_hives=config.get("num_hives", 1), num_wasps=config.get("num_wasps", 3), observes_rel_pos=config.get("observes_rel_pos", False), reward_shaping=config.get("reward_shaping", False), curriculum_learning=config.get("curriculum_learning", True), comm_learning=config.get("comm_learning", True))
+# Define the configs for the game and the training
+game_config = {
+    "N": 10,
+    "ends_when_no_wasps": False,
+    "side_size": 20,
+    "num_bouquets": 1,
+    "num_hives": 1,
+    "num_wasps": 0,
+}
+training_config = {
+    "observes_rel_pos": False,
+    "reward_shaping": False,
+    "curriculum_learning": CURRICULUM_LEARNING,
+    "comm_learning": COMM_LEARNING,
+}
+env_creator = lambda config: environment.env(game_config=config.get("game_config", {}), training_config=config.get("training_config", {}))
 # register that way to make the environment under an rllib name
 register_env('environment', lambda config: PettingZooEnv(env_creator(config)))
 
@@ -73,23 +72,21 @@ config = config.rollouts(num_rollout_workers=2, num_envs_per_worker=2)
 config = config.training(
     model={
         "custom_model": TorchActionMaskModel,
-        "custom_model_config": {"comm_learning": COMM_LEARNING},
+        "custom_model_config": {"comm_learning": COMM_LEARNING, "with_attn": WITH_ATTN},
     },
-    #lr=tune.uniform(1e-5, 1e-4),
+    grad_clip=40.0,
+    lr=2.5e-4,
+    lr_schedule = [
+        [0, 2.5e-4],
+        [10_000, 2.5e-5],
+    ],
     #train_batch_size=tune.randint(1_000, 10_000),
 )
 config = config.environment(
     'environment',
     env_config={
-        "ends_when_no_wasps": False,
-        "side_size": 20,
-        "num_bouquets": 1,
-        "num_hives": 1,
-        "num_wasps": 0,
-        "observes_rel_pos": False,
-        "reward_shaping": False,
-        "curriculum_learning": CURRICULUM_LEARNING,
-        "comm_learning": COMM_LEARNING,
+        "game_config": game_config,
+        "training_config": training_config,
     },
     env_task_fn=curriculum_fn if CURRICULUM_LEARNING else NotProvided,
 )
