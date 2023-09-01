@@ -97,17 +97,19 @@ class TorchActionMaskModel(TorchModelV2, nn.Module):
         # Extract the available actions tensor from the observation.
         action_mask = input_dict["obs"]["action_mask"]
 
-        if self.comm_learning:
-            # Here, two values for each: mean + log_std
-            comm_mask = np.ones((batch_size, 16))
-            action_mask = np.concatenate((action_mask, comm_mask), axis=1)
-            action_mask = torch.from_numpy(action_mask).float()
         # Compute the unmasked logits.
         logits, _ = self.internal_model({"obs": input_dict["obs"]["observations"]})
 
         # If action masking is disabled, directly return unmasked logits
         if self.no_masking:
             return logits, state
+
+        # Communication might be part of the action space.
+        if logits.shape[1] > 7:
+            # Here, we pad with 1s since our action_mask is only 7-dim.
+            comm_mask = np.ones((batch_size, logits.shape[1] - 7))
+            action_mask = np.concatenate((action_mask, comm_mask), axis=1)
+            action_mask = torch.from_numpy(action_mask).float()
 
         # Convert action_mask into a [0.0 || -inf]-type mask.
         inf_mask = torch.clamp(torch.log(action_mask), min=FLOAT_MIN)
