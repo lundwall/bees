@@ -309,4 +309,118 @@ experiments_list = [
             "num_heads": 8,
         },
     },
+    # Experiment 8
+    # Wasps, nocomm
+    {
+        "game_config": {
+            "N": 10,
+            "ends_when_no_wasps": True,
+            "side_size": 20,
+            "num_bouquets": 0,
+            "num_hives": 0,
+            "num_wasps": 1,
+            "num_forests": 0,
+        },
+        "training_config": {
+            "experiment_name": "fcnn_wasp_nocomm",
+            "reward_shaping": False,
+            "curriculum_learning": False,
+        },
+        "obs_config": {
+            "one_map": False,
+            "channels": True,
+            "obstacles": False,
+            "rel_pos": False,
+            "target": False,
+            "comm": False,
+            "naive_comm": False,
+            "trace": True,
+        },
+        "model_config": {
+            "no_masking": False,
+            "comm_learning": False,
+            "with_attn": False,
+            "with_self_attn": False,
+            "fcnet_hiddens": [256, 256],
+            "embedding_size": 16,
+            "hidden_size": 64,
+            "num_heads": 8,
+        },
+    },
+    # Experiment 9
+    # Wasps, hardcoded comm
+    {
+        "game_config": {
+            "N": 10,
+            "ends_when_no_wasps": True,
+            "side_size": 20,
+            "num_bouquets": 0,
+            "num_hives": 0,
+            "num_wasps": 1,
+            "num_forests": 0,
+        },
+        "training_config": {
+            "experiment_name": "fcnn_wasp_hardcoded",
+            "reward_shaping": False,
+            "curriculum_learning": False,
+        },
+        "obs_config": {
+            "one_map": False,
+            "channels": True,
+            "obstacles": False,
+            "rel_pos": True,
+            "target": False,
+            "comm": False,
+            "naive_comm": False,
+            "trace": True,
+        },
+        "model_config": {
+            "no_masking": False,
+            "comm_learning": False,
+            "with_attn": False,
+            "with_self_attn": False,
+            "fcnet_hiddens": [256, 256],
+            "embedding_size": 16,
+            "hidden_size": 64,
+            "num_heads": 8,
+        },
+    },
+    # # Experiment 10
+    # # Learned communication
+    # {
+    #     "game_config": {
+    #         "N": 10,
+    #         "ends_when_no_wasps": False,
+    #         "side_size": 20,
+    #         "num_bouquets": 1,
+    #         "num_hives": 1,
+    #         "num_wasps": 0,
+    #         "num_forests": 0,
+    #     },
+    #     "training_config": {
+    #         "experiment_name": "fcnn_hardcoded_curr",
+    #         "reward_shaping": False,
+    #         "curriculum_learning": False,
+    #     },
+    #     "obs_config": {
+    #         "one_map": False,
+    #         "channels": True,
+    #         "obstacles": False,
+    #         "rel_pos": True,
+    #         "target": False,
+    #         "comm": False,
+    #         "naive_comm": False,
+    #         "trace": True,
+    #     },
+    #     "model_config": {
+    #         "no_masking": False,
+    #         "comm_learning": False,
+    #         "with_attn": False,
+    #         "with_self_attn": False,
+    #         "fcnet_hiddens": [256, 256],
+    #         "embedding_size": 16,
+    #         "hidden_size": 64,
+    #         "num_heads": 8,
+    #     },
+    # },
 ]
