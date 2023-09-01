@@ -103,7 +103,7 @@ class raw_env(AECEnv):
                 "naive_comm": bee_comm,
             }
             # Use obs_config as mask to determine what to observe
-            result = (nectar) + tuple(
+            result = (nectar,) + tuple(
                 value for key, values in observable_values.items()
                 if self.obs_config[key] for value in (values if type(values) is tuple else (values,))
             )
