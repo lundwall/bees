@@ -35,7 +35,7 @@ experiments_list = [
             "comm_learning": False,
             "with_attn": False,
             "with_self_attn": False,
-            "fcnet_hiddens": [256, 256, 256],
+            "fcnet_hiddens": [256, 256],
             "embedding_size": 16,
             "hidden_size": 64,
             "num_heads": 8,
