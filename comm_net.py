@@ -24,7 +24,7 @@ class CommunicationNetwork(TorchModelV2, nn.Module):
             nn.ReLU(),
             nn.Linear(self.hidden_size, self.hidden_size),
             nn.ReLU(),
-            nn.Linear(self.hidden_size, self.hidden_size)  # 7 possible actions + 16 new-state values (mean + log_std for each of the 8 comm values)
+            nn.Linear(self.hidden_size, 7 + 16)  # 7 possible actions + 16 new-state values (mean + log_std for each of the 8 comm values)
         )
 
         self.value_mlp = nn.Sequential(
@@ -97,25 +97,37 @@ class AttentionModel(TorchModelV2, nn.Module):
         self.attention = MultiHeadAttention(input_dim=16, num_heads=8)
         
         self.policy_net = nn.Sequential(
-            nn.Linear(16, 64),
+            nn.Linear(17, 64),
             nn.ReLU(),
-            nn.Linear(64, num_outputs)
+            nn.Linear(64, 7 + 16)
         )
         
         self.value_net = nn.Sequential(
-            nn.Linear(16, 64),
+            nn.Linear(17, 64),
             nn.ReLU(),
             nn.Linear(64, 1)
         )
 
     def forward(self, input_dict, state, seq_lens):
         x = input_dict["obs"].float()
-        non_padded_mask = x.abs().sum(dim=-1) != 0
-        # Keep only non-padded elements for each batch
-        x = [data[mask] for data, mask in zip(x, non_padded_mask)]
-        attn_output = self.attention(x)
-        logits = self.policy_net(attn_output)
-        self._value_out = self.value_net(attn_output)
+        
+        # Identify non-padded sequences
+        non_padded_mask = x.abs().sum(dim=-1) != 0  # Shape: [batch_size, seq_len]
+        
+        # Use the mask to filter out padded vectors
+        non_padded_x = [seq[mask] for seq, mask in zip(x, non_padded_mask)]
+        
+        # Process each sequence through attention
+        attn_outputs = []
+        for seq in non_padded_x:
+            attn_output = self.attention(seq)
+            attn_outputs.append(attn_output)
+        
+        # Stack the attention outputs to form a single tensor
+        stacked_attn_output = torch.stack(attn_outputs)
+        
+        logits = self.policy_net(stacked_attn_output)
+        self._value_out = self.value_net(stacked_attn_output)
         return logits, state
 
     def value_function(self):
