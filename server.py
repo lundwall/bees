@@ -4,6 +4,28 @@ from visualization.modules.HexGridVisualization import CanvasHexGrid
 from agents import Bee, BeeManual, Flower, Hive, Forest, Wasp
 from model import Garden
 
+HARDCODED_BEES = True
+TRAINING_CHECKPOINT_FILE = "/Users/marclundwall/ray_results/comm_e128_h256_nectar"
+
+game_config = {
+    "N": 10,
+    "ends_when_no_wasps": False,
+    "side_size": 20,
+    "num_bouquets": 1,
+    "num_hives": 1,
+    "num_wasps": 0,
+    "num_forests": 0,
+}
+obs_config = {
+    "one_map": False,
+    "channels": True,
+    "obstacles": False,
+    "rel_pos": True,
+    "target": False,
+    "comm": True,
+    "naive_comm": False,
+    "trace": False,
+}
 
 def Bees_portrayal(agent):
     if agent is None:
@@ -19,18 +41,17 @@ def Bees_portrayal(agent):
         return {"Shape": "resources/hive.png", "scale": 1, "Layer": 1, "honey": agent.honey}
 
     elif type(agent) is Forest:
-        return {"Shape": "resources/tree.png", "scale": 1, "Layer": 1}
+        return {"Shape": "resources/tree.png", "scale": 1, "Layer": 1, "pos": agent.pos}
 
     elif type(agent) is Wasp:
         return {"Shape": "resources/wasp.png", "scale": 1, "Layer": 1}
 
     return {}
 
-SIDE_SIZE = 20
-
-canvas_element = CanvasHexGrid(Bees_portrayal, SIDE_SIZE, SIDE_SIZE, 600, 600)
+canvas_element = CanvasHexGrid(Bees_portrayal, game_config["side_size"], game_config["side_size"], 600, 600)
 
 server = ModularServer(
-    Garden, [canvas_element], "Bee Garden", model_params={"N": 10, "width": SIDE_SIZE, "height": SIDE_SIZE, "num_hives": 1, "num_bouquets": 1, "num_forests": 0, "num_wasps": 0, "rl": True, "training_checkpoint": "/Users/marclundwall/ray_results/comm_e128_h256_nectar"}
+    Garden, [canvas_element], "Bee Garden", model_params={"game_config": game_config, "obs_config": obs_config, "seed": None, "hardcoded_bees": HARDCODED_BEES, "inference": True, "training_checkpoint": TRAINING_CHECKPOINT_FILE}
 )
+# Not necessary with the `mesa runserver` command
 # server.launch()

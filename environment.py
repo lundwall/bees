@@ -14,14 +14,14 @@ from pettingzoo.utils import agent_selector, wrappers
 
 MAX_ROUNDS = 100
 
-def env(render_mode=None, game_config={}, training_config={}):
+def env(render_mode=None, game_config={}, training_config={}, obs_config={}):
     """
     The env function often wraps the environment in wrappers by default.
     You can find full documentation for these methods
     elsewhere in the developer documentation.
     """
     internal_render_mode = render_mode if render_mode != "ansi" else "human"
-    env = raw_env(render_mode=internal_render_mode, game_config=game_config, training_config=training_config)
+    env = raw_env(render_mode=internal_render_mode, game_config=game_config, training_config=training_config, obs_config=obs_config)
     # This wrapper is only for environments which print results to the terminal
     if render_mode == "ansi":
         env = wrappers.CaptureStdoutWrapper(env)
@@ -41,7 +41,7 @@ class raw_env(AECEnv):
 
     metadata = {"render_modes": ["human"], "name": "rps_v2"}
 
-    def __init__(self, render_mode=None, game_config={}, training_config={}):
+    def __init__(self, render_mode=None, game_config={}, training_config={}, obs_config={}):
         """
         The init method takes in environment arguments and
          should define the following attributes:
@@ -55,25 +55,17 @@ class raw_env(AECEnv):
         These attributes should not be changed after initialization.
         """
         # N is the number of bees
-        self.N = game_config.get("N", 10)
-        self.possible_agents = [f"bee_{i}" for i in range(self.N)]
+        self.game_config = game_config
+        self.training_config = training_config
+        self.obs_config = obs_config
+
+        self.possible_agents = [f"bee_{i}" for i in range(self.game_config["N"])]
 
         self.render_mode = render_mode
 
-        self.ends_when_no_wasps = game_config.get("ends_when_no_wasps", False)
-        self.num_bouquets = game_config.get("num_bouquets", 1)
-        self.num_hives = game_config.get("num_hives", 1)
-        self.num_wasps = game_config.get("num_wasps", 3)
-
-        self.observes_rel_pos = training_config.get("observes_rel_pos", False)
-        self.reward_shaping = training_config.get("reward_shaping", False)
-        self.curriculum_learning = training_config.get("curriculum_learning", False)
-        if self.curriculum_learning:
+        if self.training_config["curriculum_learning"]:
             self.cur_schedule = training_config.get("cur_schedule", [10 + 2*i for i in range(6)])
             self.cur_level = 0
-        else:
-            self.side_size = game_config.get("side_size", 20)
-        self.comm_learning = training_config.get("comm_learning", False)
 
     # Observation space should be defined here.
     # lru_cache allows observation and action spaces to be memoized, reducing clock cycles required to get each agent's space.
@@ -81,44 +73,41 @@ class raw_env(AECEnv):
     @functools.lru_cache(maxsize=None)
     def observation_space(self, agent):
         # gymnasium spaces are defined and documented here: https://gymnasium.farama.org/api/spaces/
-        # nectar = Discrete(100)
-        # bee_flags = Box(0, 16_777_215, shape=(121,), dtype=np.uint32)
-        # flower_nectar = Box(0, 99, shape=(121,), dtype=np.uint8)
-        # hive = Box(0, 1, shape=(121,), dtype=np.uint8)
-
-        #return {"observations": (1 if self.nectar == self.MAX_NECTAR else 0, wasp_rel_pos, hive_rel_pos, flower_rel_pos, obstacles, bee_presence, flower_presence, flower_nectar, wasp_presence, hive_presence, trace), "action_mask": action_mask}
-
-        # nectar = Discrete(101)
-        # bee_flags = Box(0, 255, shape=(81,), dtype=np.uint8)
-        # flower_nectar = Box(0, 100, shape=(81,), dtype=np.uint8)
-        # hive = Box(0, 255, shape=(81,), dtype=np.uint8)
-        # return Tuple((nectar, bee_flags, flower_nectar, hive))
         nectar = Discrete(2)
-        # trace = MultiDiscrete([7] * 10)
-        # bee_flags = Box(0, 1, shape=(81,), dtype=np.uint8)
-        # hive = Box(0, 1, shape=(49,), dtype=np.uint8)
-        wasp = Box(-50, 50, shape=(2,), dtype=np.int8)
-        hive = Box(-50, 50, shape=(2,), dtype=np.int8)
-        flower = Box(-50, 50, shape=(2,), dtype=np.int8)
-        # target_rel_pos = Box(-50, 50, shape=(2,), dtype=np.int8)
-        # map = Box(-5, 20, shape=(49,), dtype=np.int8)
-        obstacles = Box(0, 1, shape=(49,), dtype=np.uint8)
-        bee_presence = Box(0, 1, shape=(49,), dtype=np.uint8)
-        flower_presence = Box(0, 1, shape=(49,), dtype=np.uint8)
-        flower_nectar = Box(0, 20, shape=(49,), dtype=np.uint8)
-        wasp_presence = Box(0, 1, shape=(49,), dtype=np.uint8)
-        hive_presence = Box(0, 1, shape=(49,), dtype=np.uint8)
-        trace_presence = Box(0, 1, shape=(49,), dtype=np.uint8)
+        bee_comm = Box(0, 1, shape=(37,8), dtype=np.float32)
+        wasp_rel_pos = Box(-50, 50, shape=(3,), dtype=np.int8)
+        hive_rel_pos = Box(-50, 50, shape=(3,), dtype=np.int8)
+        flower_rel_pos = Box(-50, 50, shape=(3,), dtype=np.int8)
+        target_rel_pos = Box(-50, 50, shape=(3,), dtype=np.int8)
+        map = Box(0, 6, shape=(49,), dtype=np.int8)
+        obstacle_presence = Box(0, 1, shape=(37,), dtype=np.uint8)
+        bee_presence = Box(0, 1, shape=(37,), dtype=np.uint8)
+        flower_presence = Box(0, 1, shape=(37,), dtype=np.uint8)
+        flower_nectar = Box(0, 20, shape=(37,), dtype=np.uint8)
+        wasp_presence = Box(0, 1, shape=(37,), dtype=np.uint8)
+        hive_presence = Box(0, 1, shape=(37,), dtype=np.uint8)
+        trace_presence = Box(0, 1, shape=(37,), dtype=np.uint8)
 
-        comm_obs = Box(0.0, 1.0, shape=(38,16), dtype=np.float32)
+        comm_obs = Box(0.0, 1.0, shape=(38,17), dtype=np.float32)
 
-        if self.comm_learning:
+        if self.obs_config["comm"]:
             observation = comm_obs
         else:
-            if self.observes_rel_pos:
-                observation = Tuple((nectar, wasp, hive, flower, obstacles, bee_presence, flower_presence, flower_nectar, wasp_presence, hive_presence, trace_presence))
-            else:
-                observation = Tuple((nectar, obstacles, bee_presence, flower_presence, flower_nectar, wasp_presence, hive_presence, trace_presence))
+            observable_values = {
+                "one_map": map,
+                "channels": (bee_presence, flower_presence, flower_nectar, wasp_presence, hive_presence),
+                "obstacles": obstacle_presence,
+                "trace": trace_presence,
+                "rel_pos": (wasp_rel_pos, hive_rel_pos, flower_rel_pos),
+                "target": target_rel_pos,
+                "naive_comm": bee_comm,
+            }
+            # Use obs_config as mask to determine what to observe
+            result = (nectar) + tuple(
+                value for key, values in observable_values.items()
+                if self.obs_config[key] for value in (values if type(values) is tuple else (values,))
+            )
+            observation = Tuple(result)
 
         action_mask = Box(0, 1, shape=(7,), dtype=np.int8)
         return Dict({'observations': observation, 'action_mask': action_mask})
@@ -127,7 +116,7 @@ class raw_env(AECEnv):
     # If your spaces change over time, remove this line (disable caching).
     @functools.lru_cache(maxsize=None)
     def action_space(self, agent):
-        if self.comm_learning:
+        if self.obs_config["comm"] or self.obs_config["naive_comm"]:
             return Tuple((Discrete(7), Box(0.0, 1.0, shape=(8,), dtype=np.float32)))
         else:
             return Discrete(7)
@@ -194,9 +183,9 @@ class raw_env(AECEnv):
         can be called without issues.
         Here it sets up the state dictionary which is used by step() and the observations dictionary which is used by step() and observe()
         """
-        if self.curriculum_learning:
-            self.side_size = self.cur_schedule[self.cur_level]
-        self.model = Garden(N=self.N, width=self.side_size, height=self.side_size, num_hives=self.num_hives, num_bouquets=self.num_bouquets, num_wasps=self.num_wasps, training=True, observes_rel_pos=self.observes_rel_pos, comm_learning=self.comm_learning)
+        if self.training_config["curriculum_learning"]:
+            self.game_config["side_size"] = self.cur_schedule[self.cur_level]
+        self.model = Garden(game_config=self.game_config, obs_config=self.obs_config, hardcoded_bees=False, inference=False)
         self.visualizer = TextGrid(self.model.grid, self.converter)
         self.agents = self.possible_agents[:]
         self.rewards = {agent: 0 for agent in self.agents}
@@ -244,21 +233,17 @@ class raw_env(AECEnv):
         agent_id = int(agent.lstrip("bee_"))
         bee: Bee = self.model.schedule_bees._agents[agent_id]
 
-        # # Get difference in direction before updating the trace
-        # diffs = [min(abs(diff - action), 7 - abs(diff - action)) for diff in list(bee.trace)]
-        # total_diff = sum(diffs)
-
         # Get previous state 'value'
         prev_nectar = bee.nectar
         prev_flower_dist = None
-        if bee.rel_pos["flower"] != (0, 0):
-            prev_flower_dist = bee.dist_to_rel_pos(bee.rel_pos["flower"])
+        if bee.rel_pos["flower"] != (0, 0, 0):
+            prev_flower_dist = bee.dist_to_cube_pos(bee.rel_pos["flower"])
         prev_hive_dist = None
-        if bee.rel_pos["hive"] != (0, 0):
-            prev_hive_dist = bee.dist_to_rel_pos(bee.rel_pos["hive"])
+        if bee.rel_pos["hive"] != (0, 0, 0):
+            prev_hive_dist = bee.dist_to_cube_pos(bee.rel_pos["hive"])
         prev_wasp_dist = None
-        if bee.rel_pos["wasp"] != (0, 0):
-            prev_wasp_dist = bee.dist_to_rel_pos(bee.rel_pos["wasp"])
+        if bee.rel_pos["wasp"] != (0, 0, 0):
+            prev_wasp_dist = bee.dist_to_cube_pos(bee.rel_pos["wasp"])
         
         # Perform the bee's step
         bee.step(action)
@@ -266,14 +251,14 @@ class raw_env(AECEnv):
         # Get next state 'value', to compare with previous state
         next_nectar = bee.nectar
         next_flower_dist = None
-        if bee.rel_pos["flower"] != (0, 0):
-            next_flower_dist = bee.dist_to_rel_pos(bee.rel_pos["flower"])
+        if bee.rel_pos["flower"] != (0, 0, 0):
+            next_flower_dist = bee.dist_to_cube_pos(bee.rel_pos["flower"])
         next_hive_dist = None
-        if bee.rel_pos["hive"] != (0, 0):
-            next_hive_dist = bee.dist_to_rel_pos(bee.rel_pos["hive"])
+        if bee.rel_pos["hive"] != (0, 0, 0):
+            next_hive_dist = bee.dist_to_cube_pos(bee.rel_pos["hive"])
         next_wasp_dist = None
-        if bee.rel_pos["wasp"] != (0, 0):
-            next_wasp_dist = bee.dist_to_rel_pos(bee.rel_pos["wasp"])
+        if bee.rel_pos["wasp"] != (0, 0, 0):
+            next_wasp_dist = bee.dist_to_cube_pos(bee.rel_pos["wasp"])
 
         # Receive nectar reward
         reward = abs(next_nectar - prev_nectar)/10.0
@@ -286,7 +271,7 @@ class raw_env(AECEnv):
                 num_blocked = 6 - len(valid_nbs)
                 reward += num_blocked/10.0
         
-        if self.reward_shaping:
+        if self.training_config["reward_shaping"]:
             if prev_wasp_dist is not None and next_wasp_dist is not None :
                 reward += prev_wasp_dist - next_wasp_dist
             else:
@@ -302,9 +287,11 @@ class raw_env(AECEnv):
             self.model.schedule_flowers.step()
             self.model.schedule_wasps.step()
             self.num_rounds += 1
-            if self.num_rounds > MAX_ROUNDS or (self.ends_when_no_wasps and self.model.schedule_wasps.get_agent_count() == 0):
+            if self.num_rounds > MAX_ROUNDS or (self.game_config["ends_when_no_wasps"] and self.model.schedule_wasps.get_agent_count() == 0):
                 for a in self.agents:
                     self.truncations[a] = True
+        
+        self.infos[agent] = {"score": bee.model.score}
 
         # selects the next agent.
         if self._agent_selector.agent_order:

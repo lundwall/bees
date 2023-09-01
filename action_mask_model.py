@@ -3,7 +3,7 @@ import numpy as np
 
 from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 from ray.rllib.models.torch.complex_input_net import ComplexInputNetwork
-from comm_net import CommunicationNetwork, CommunicationAttentionNetwork
+from comm_net import CommunicationNetwork, AttentionModel, SelfAttentionModel
 from ray.rllib.utils.framework import try_import_tf, try_import_torch
 from ray.rllib.utils.torch_utils import FLOAT_MIN
 
@@ -20,14 +20,22 @@ class TorchActionMaskModel(TorchModelV2, nn.Module):
         num_outputs,
         model_config,
         name,
+        no_masking=False,
         comm_learning=False,
-        comm_size=8,
+        with_attn=False,
+        with_self_attn=False,
         embedding_size=16,
         hidden_size=64,
-        with_attn=False,
-        **kwargs,
+        num_heads=8,
     ):
+        self.no_masking = no_masking
         self.comm_learning = comm_learning
+        self.with_attn = with_attn
+        self.with_self_attn = with_self_attn
+
+        self.embedding_size = embedding_size
+        self.hidden_size = hidden_size
+        self.num_heads = num_heads
 
         orig_space = getattr(obs_space, "original_space", obs_space)
         assert (
@@ -37,21 +45,32 @@ class TorchActionMaskModel(TorchModelV2, nn.Module):
         )
 
         TorchModelV2.__init__(
-            self, obs_space, action_space, num_outputs, model_config, name, **kwargs
+            self, obs_space, action_space, num_outputs, model_config, name
         )
         nn.Module.__init__(self)
 
         if self.comm_learning:
-            if with_attn:
-                self.internal_model = CommunicationAttentionNetwork(
+            if self.with_self_attn:
+                self.internal_model = SelfAttentionModel(
                     orig_space["observations"],
                     action_space,
                     num_outputs,
                     model_config,
                     name + "_internal",
-                    comm_size=comm_size,
+                    embedding_size=self.embedding_size,
+                    hidden_size=self.hidden_size,
+                    num_heads=self.num_heads,
+                )
+            elif self.with_attn:
+                self.internal_model = AttentionModel(
+                    orig_space["observations"],
+                    action_space,
+                    num_outputs,
+                    model_config,
+                    name + "_internal",
                     embedding_size=embedding_size,
                     hidden_size=hidden_size,
+                    num_heads=num_heads,
                 )
             else:
                 self.internal_model = CommunicationNetwork(
@@ -60,9 +79,8 @@ class TorchActionMaskModel(TorchModelV2, nn.Module):
                     num_outputs,
                     model_config,
                     name + "_internal",
-                    comm_size=comm_size,
-                    embedding_size=embedding_size,
-                    hidden_size=hidden_size,
+                    embedding_size=self.embedding_size,
+                    hidden_size=self.hidden_size,
                 )
         else:
                 self.internal_model = ComplexInputNetwork(
@@ -72,11 +90,6 @@ class TorchActionMaskModel(TorchModelV2, nn.Module):
                     model_config,
                     name + "_internal",
                 )
-
-        # disable action masking --> will likely lead to invalid actions
-        self.no_masking = False
-        if "no_masking" in model_config["custom_model_config"]:
-            self.no_masking = model_config["custom_model_config"]["no_masking"]
 
     def forward(self, input_dict, state, seq_lens):
         batch_size = input_dict["obs"]["action_mask"].shape[0]
