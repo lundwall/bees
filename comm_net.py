@@ -11,7 +11,7 @@ class CommunicationNetwork(TorchModelV2, nn.Module):
         self.hidden_size = kwargs["hidden_size"]
 
         self.shared_mlp = nn.Sequential(
-            nn.Linear(17, ), # 17 = 6 ohe + 8 comm + 3 nectar
+            nn.Linear(17, self.hidden_size), # 17 = 6 ohe + 8 comm + 3 nectar
             nn.ReLU(),
             nn.Linear(self.hidden_size, self.hidden_size),
             nn.ReLU(),
