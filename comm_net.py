@@ -11,28 +11,28 @@ class CommunicationNetwork(TorchModelV2, nn.Module):
         self.hidden_size = kwargs["hidden_size"]
 
         self.shared_mlp = nn.Sequential(
-            nn.Linear(17, 256),
+            nn.Linear(17, ), # 17 = 6 ohe + 8 comm + 3 nectar
             nn.ReLU(),
-            nn.Linear(256, 256),
+            nn.Linear(self.hidden_size, self.hidden_size),
             nn.ReLU(),
-            nn.Linear(256, 128),
+            nn.Linear(self.hidden_size, self.embedding_size),
             nn.ReLU()
         )
 
         self.action_mlp = nn.Sequential(
-            nn.Linear(137, 256), # 41 = 32 (embedding) + 9 (s_own)
+            nn.Linear(self.embedding_size + 9, self.hidden_size), # 41 = 32 (embedding) + 9 (s_own)
             nn.ReLU(),
-            nn.Linear(256, 256),
+            nn.Linear(self.hidden_size, self.hidden_size),
             nn.ReLU(),
-            nn.Linear(256, 23)  # 7 possible actions + 16 new-state values (mean + log_std for each of the 8 comm values)
+            nn.Linear(self.hidden_size, self.hidden_size)  # 7 possible actions + 16 new-state values (mean + log_std for each of the 8 comm values)
         )
 
         self.value_mlp = nn.Sequential(
-            nn.Linear(137, 256),
+            nn.Linear(self.embedding_size + 9, self.hidden_size),
             nn.ReLU(),
-            nn.Linear(256, 256),
+            nn.Linear(self.hidden_size, self.hidden_size),
             nn.ReLU(),
-            nn.Linear(256, 1)  # Single value output
+            nn.Linear(self.hidden_size, 1)  # Single value output
         )
 
     def forward(self, input_dict, state, seq_lens):
