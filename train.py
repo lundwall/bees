@@ -80,7 +80,7 @@ config = config.training(
     model={
         "custom_model": TorchActionMaskModel,
         "custom_model_config": model_config,
-        "fcnet_hiddens": model_config["hidden_size"],
+        "fcnet_hiddens": model_config["fcnet_hiddens"],
     },
     grad_clip=40.0,
     lr=1e-4,
