@@ -475,7 +475,7 @@ experiments_list = [
         },
         "training_config": {
             "experiment_name": "comm",
-            "reward_shaping": False,
+            "reward_shaping": True,
             "curriculum_learning": False,
         },
         "obs_config": {
