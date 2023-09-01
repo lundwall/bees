@@ -74,7 +74,7 @@ class raw_env(AECEnv):
     def observation_space(self, agent):
         # gymnasium spaces are defined and documented here: https://gymnasium.farama.org/api/spaces/
         nectar = Discrete(2)
-        bee_comm = Box(0, 1, shape=(37,8), dtype=np.float32)
+        bee_comm = Box(0, 1, shape=(8*37,), dtype=np.float32)
         wasp_rel_pos = Box(-50, 50, shape=(3,), dtype=np.int8)
         hive_rel_pos = Box(-50, 50, shape=(3,), dtype=np.int8)
         flower_rel_pos = Box(-50, 50, shape=(3,), dtype=np.int8)
