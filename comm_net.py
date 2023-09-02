@@ -81,21 +81,28 @@ class MultiHeadAttention(nn.Module):
     def __init__(self, input_dim, num_heads):
         super(MultiHeadAttention, self).__init__()
         self.num_heads = num_heads
-        self.key_layers = nn.ModuleList([nn.Linear(input_dim, input_dim) for _ in range(num_heads)])
-        self.value_layers = nn.ModuleList([nn.Linear(input_dim, input_dim) for _ in range(num_heads)])
+        self.input_dim = input_dim
+
+        self.key_layers = nn.Linear(input_dim, input_dim * num_heads)
+        self.value_layers = nn.Linear(input_dim, input_dim * num_heads)
         self.queries = nn.Parameter(torch.randn(num_heads, input_dim))
         self.output_layer = nn.Linear(input_dim * num_heads, input_dim)
 
-    def forward(self, x):
-        outputs = []
-        for i in range(self.num_heads):
-            keys = self.key_layers[i](x)
-            values = self.value_layers[i](x)
-            scores = torch.matmul(keys, self.queries[i].unsqueeze(-1)).squeeze(-1)
-            attn_weights = torch.nn.functional.softmax(scores, dim=-1)
-            aggregated_vector = torch.sum(attn_weights.unsqueeze(1) * values, dim=0)
-            outputs.append(aggregated_vector)
-        concatenated_outputs = torch.cat(outputs, dim=-1)
+    def forward(self, x, non_padded_mask=None):
+        batch_size, seq_len, _ = x.size()
+
+        keys = self.key_layers(x).view(batch_size, seq_len, self.num_heads, self.input_dim)
+        values = self.value_layers(x).view(batch_size, seq_len, self.num_heads, self.input_dim)
+
+        scores = (keys @ self.queries.T.unsqueeze(0).unsqueeze(0)).squeeze(-2)
+
+        if non_padded_mask is not None:
+            scores = scores.masked_fill(~non_padded_mask.unsqueeze(-1), float('-inf'))
+
+        attn_weights = torch.nn.functional.softmax(scores, dim=1)
+        aggregated_vectors = (attn_weights.unsqueeze(-1) * values).sum(dim=1)
+
+        concatenated_outputs = aggregated_vectors.view(batch_size, -1)
         combined_output = self.output_layer(concatenated_outputs)
         return combined_output
 
@@ -103,23 +110,29 @@ class MultiHeadSelfAttention(nn.Module):
     def __init__(self, input_dim, num_heads):
         super(MultiHeadSelfAttention, self).__init__()
         self.num_heads = num_heads
-        self.key_layers = nn.ModuleList([nn.Linear(input_dim, input_dim) for _ in range(num_heads)])
-        self.value_layers = nn.ModuleList([nn.Linear(input_dim, input_dim) for _ in range(num_heads)])
-        self.query_layers = nn.ModuleList([nn.Linear(input_dim, input_dim) for _ in range(num_heads)])
+        self.input_dim = input_dim
+
+        self.key_layers = nn.Linear(input_dim, input_dim * num_heads)
+        self.value_layers = nn.Linear(input_dim, input_dim * num_heads)
+        self.query_layers = nn.Linear(input_dim, input_dim * num_heads)
         self.output_layer = nn.Linear(input_dim * num_heads, input_dim)
 
-    def forward(self, x):
-        outputs = []
-        for i in range(self.num_heads):
-            keys = self.key_layers[i](x)
-            values = self.value_layers[i](x)
-            queries = self.query_layers[i](x)
-            scores = torch.matmul(queries, keys.transpose(-2, -1))
-            attn_weights = torch.nn.functional.softmax(scores, dim=-1)
-            aggregated_vector = torch.matmul(attn_weights, values)
-            outputs.append(aggregated_vector)
-        concatenated_outputs = torch.cat(outputs, dim=-1)
-        combined_output = self.output_layer(concatenated_outputs)
+    def forward(self, x, non_padded_mask=None):
+        batch_size, seq_len, _ = x.size()
+
+        keys = self.key_layers(x).view(batch_size, seq_len, self.num_heads, self.input_dim)
+        values = self.value_layers(x).view(batch_size, seq_len, self.num_heads, self.input_dim)
+        queries = self.query_layers(x).view(batch_size, seq_len, self.num_heads, self.input_dim)
+
+        scores = (queries @ keys.transpose(-2, -1))
+
+        if non_padded_mask is not None:
+            scores = scores.masked_fill(~non_padded_mask.unsqueeze(1).unsqueeze(-1), float('-inf'))
+
+        attn_weights = torch.nn.functional.softmax(scores, dim=-1)
+        aggregated_vectors = (attn_weights @ values).view(batch_size, seq_len, -1)
+
+        combined_output = self.output_layer(aggregated_vectors)
         return combined_output
 
 class AttentionNetwork(TorchModelV2, nn.Module):
@@ -127,17 +140,32 @@ class AttentionNetwork(TorchModelV2, nn.Module):
         TorchModelV2.__init__(self, obs_space, action_space, num_outputs, model_config, name)
         nn.Module.__init__(self)
 
+        self.embedding_size = kwargs["embedding_size"]
         self.hidden_size = kwargs["hidden_size"]
         self.num_heads = kwargs["num_heads"]
         self.with_self_attn = kwargs["with_self_attn"]
 
-        if self.with_self_attn:
-            self.attention = MultiHeadSelfAttention(input_dim=17, num_heads=self.num_heads)
+        # input_dim is for the input to the attention network, and the policy and value networks
+        if self.embedding_size == 0:
+            self.input_dim = 17
         else:
-            self.attention = MultiHeadAttention(input_dim=17, num_heads=self.num_heads)
+            self.input_dim = self.embedding_size
+            self.shared_mlp = nn.Sequential(
+                nn.Linear(17, self.hidden_size), # 17 = 6 ohe + 8 comm + 3 nectar
+                nn.ReLU(),
+                nn.Linear(self.hidden_size, self.hidden_size),
+                nn.ReLU(),
+                nn.Linear(self.hidden_size, self.input_dim),
+                nn.ReLU()
+            )
+
+        if self.with_self_attn:
+            self.attention = MultiHeadSelfAttention(input_dim=self.input_dim, num_heads=self.num_heads)
+        else:
+            self.attention = MultiHeadAttention(input_dim=self.input_dim, num_heads=self.num_heads)
         
         self.policy_net = nn.Sequential(
-            nn.Linear(17+9, self.hidden_size),
+            nn.Linear(self.input_dim+9, self.hidden_size),
             nn.ReLU(),
             nn.Linear(self.hidden_size, self.hidden_size),
             nn.ReLU(),
@@ -145,7 +173,7 @@ class AttentionNetwork(TorchModelV2, nn.Module):
         )
         
         self.value_net = nn.Sequential(
-            nn.Linear(17+9, self.hidden_size),
+            nn.Linear(self.input_dim+9, self.hidden_size),
             nn.ReLU(),
             nn.Linear(self.hidden_size, self.hidden_size),
             nn.ReLU(),
@@ -168,24 +196,19 @@ class AttentionNetwork(TorchModelV2, nn.Module):
             self._value_out = torch.zeros((x.shape[0]))
             return torch.zeros((x.shape[0], 7+16)), state
 
-        # Process each sequence through attention
-        attn_outputs = []
-        for seq, mask in zip(x, non_padded_mask):
-            non_padded_seq = seq[mask]
-            attn_output = self.attention(non_padded_seq)
+        # If we're using embeddings
+        if self.embedding_size != 0:
+            x = self.shared_mlp(x.view(-1, 17)).view(x.size(0), x.size(1), -1)
 
-            # Compute the average if in SA, since self-attention means that the
-            # output is a sequence of as many vectors as the input
-            if self.with_self_attn:
-                attn_output = torch.mean(attn_output, dim=0)
-            
-            attn_outputs.append(attn_output)
+        attn_output = self.attention(x, non_padded_mask=non_padded_mask)
 
-        # Stack the attention outputs to form a single tensor
-        stacked_attn_output = torch.stack(attn_outputs)
-        
+        # Compute the average if in SA, since self-attention means that the
+        # output is a sequence of as many vectors as the input
+        if self.with_self_attn:
+            attn_output = torch.mean(attn_output, dim=0)
+
         # Concatenate the special vectors to the attention output
-        combined_output = torch.cat([stacked_attn_output, special_vectors], dim=-1)
+        combined_output = torch.cat([attn_output, special_vectors], dim=-1)
 
         logits = self.policy_net(combined_output)
         self._value_out = self.value_net(combined_output)
