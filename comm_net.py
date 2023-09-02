@@ -98,7 +98,7 @@ class MultiHeadAttention(nn.Module):
 
         if non_padded_mask is not None:
             # Expand the mask to have the same shape as scores
-            expanded_mask = non_padded_mask.unsqueeze(-1)
+            expanded_mask = non_padded_mask.unsqueeze(-1).expand_as(scores)
             scores = scores.masked_fill(~expanded_mask, float('-inf'))
 
         attn_weights = torch.nn.functional.softmax(scores, dim=1)
@@ -130,7 +130,7 @@ class MultiHeadSelfAttention(nn.Module):
 
         if non_padded_mask is not None:
             # Expand the mask to have the same shape as scores
-            expanded_mask = non_padded_mask.unsqueeze(-1)
+            expanded_mask = non_padded_mask.unsqueeze(-1).expand_as(scores)
             scores = scores.masked_fill(~expanded_mask, float('-inf'))
 
         attn_weights = torch.nn.functional.softmax(scores, dim=-1)
