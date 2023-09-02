@@ -474,8 +474,8 @@ experiments_list = [
             "num_forests": 0,
         },
         "training_config": {
-            "experiment_name": "comm",
-            "reward_shaping": True,
+            "experiment_name": "comm_std",
+            "reward_shaping": False,
             "curriculum_learning": False,
         },
         "obs_config": {
@@ -513,7 +513,7 @@ experiments_list = [
         },
         "training_config": {
             "experiment_name": "comm_attn",
-            "reward_shaping": True,
+            "reward_shaping": False,
             "curriculum_learning": False,
         },
         "obs_config": {
@@ -551,7 +551,7 @@ experiments_list = [
         },
         "training_config": {
             "experiment_name": "comm_self_attn",
-            "reward_shaping": True,
+            "reward_shaping": False,
             "curriculum_learning": False,
         },
         "obs_config": {
@@ -588,8 +588,8 @@ experiments_list = [
             "num_forests": 0,
         },
         "training_config": {
-            "experiment_name": "comm_wasp",
-            "reward_shaping": True,
+            "experiment_name": "comm_wasp_std",
+            "reward_shaping": False,
             "curriculum_learning": False,
         },
         "obs_config": {
@@ -627,7 +627,7 @@ experiments_list = [
         },
         "training_config": {
             "experiment_name": "comm_wasp_attn",
-            "reward_shaping": True,
+            "reward_shaping": False,
             "curriculum_learning": False,
         },
         "obs_config": {
@@ -665,7 +665,7 @@ experiments_list = [
         },
         "training_config": {
             "experiment_name": "comm_wasp_self_attn",
-            "reward_shaping": True,
+            "reward_shaping": False,
             "curriculum_learning": False,
         },
         "obs_config": {
