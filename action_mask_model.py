@@ -58,7 +58,6 @@ class TorchActionMaskModel(TorchModelV2, nn.Module):
                     num_outputs,
                     model_config,
                     name + "_internal",
-                    embedding_size=embedding_size,
                     hidden_size=hidden_size,
                     num_heads=num_heads,
                     with_self_attn=self.with_self_attn,

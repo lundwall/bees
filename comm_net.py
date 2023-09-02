@@ -117,7 +117,6 @@ class AttentionNetwork(TorchModelV2, nn.Module):
         TorchModelV2.__init__(self, obs_space, action_space, num_outputs, model_config, name)
         nn.Module.__init__(self)
 
-        self.embedding_size = kwargs["embedding_size"]
         self.hidden_size = kwargs["hidden_size"]
         self.num_heads = kwargs["num_heads"]
         self.with_self_attn = kwargs["with_self_attn"]
