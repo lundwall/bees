@@ -43,18 +43,28 @@ class CommunicationNetwork(TorchModelV2, nn.Module):
         s_own = input_dict['obs'][:, 0, :9]  # shape: (batch_size, 9)
         sequences = input_dict['obs'][:, 1:, :]  # shape: (batch_size, 37, 17)
 
+        # Identify non-padded sequences
+        non_padded_mask = sequences.abs().sum(dim=-1) != 0  # Shape: [batch_size, seq_len]
+        reshaped_mask = non_padded_mask.reshape(-1)  # Shape: [batch_size * seq_len]
+
         # Join all batches together
-        reshaped_sequences = sequences.reshape(-1, 17) # shape: (batch_size * 37, 17)
+        reshaped_sequences = sequences.reshape(-1, 17)  # shape: [batch_size * seq_len, 17]
+
+        # Use the mask to filter out padded vectors
+        filtered_sequences = reshaped_sequences[reshaped_mask]
 
         # Pass each 17-value vector through the shared MLP
-        shared_output = self.shared_mlp(reshaped_sequences)
+        shared_output = self.shared_mlp(filtered_sequences)
+
+        # Prepare to scatter the shared_output back to its original position
+        expanded_output = torch.zeros(batch_size * seq_len, shared_output.shape[1])
+        expanded_output[reshaped_mask] = shared_output
 
         # Reshape the output back to the original shape and sum along the sequence dimension
-        # (one sum for each batch)
-        summed_output = shared_output.view(batch_size, seq_len, -1).sum(dim=1)
+        summed_output = expanded_output.view(batch_size, seq_len, -1).sum(dim=1)
 
         # Concatenate with own bee's state
-        concatenated_output = torch.cat([summed_output, s_own], dim=1)  # shape: (batch_size, 25)
+        concatenated_output = torch.cat([summed_output, s_own], dim=1)  # shape: [batch_size, 25]
 
         # Pass the summed+concated output through the action MLP
         action_logits = self.action_mlp(concatenated_output)
