@@ -94,11 +94,11 @@ class MultiHeadAttention(nn.Module):
         keys = self.key_layers(x).view(batch_size, seq_len, self.num_heads, self.input_dim)
         values = self.value_layers(x).view(batch_size, seq_len, self.num_heads, self.input_dim)
 
-        scores = (keys @ self.queries.T.unsqueeze(0).unsqueeze(0)).squeeze(-2)
+        scores = torch.einsum('bshd,hd->bsh', keys, self.queries)
 
         if non_padded_mask is not None:
             # Expand the mask to have the same shape as scores
-            expanded_mask = non_padded_mask.unsqueeze(-1).expand(batch_size, seq_len, self.num_heads)
+            expanded_mask = non_padded_mask.unsqueeze(-1).expand_as(scores)
             scores = scores.masked_fill(~expanded_mask, float('-inf'))
 
         attn_weights = torch.nn.functional.softmax(scores, dim=1)
@@ -125,15 +125,15 @@ class MultiHeadSelfAttention(nn.Module):
         values = self.value_layers(x).view(batch_size, seq_len, self.num_heads, self.input_dim)
         queries = self.query_layers(x).view(batch_size, seq_len, self.num_heads, self.input_dim)
 
-        scores = (queries @ keys.transpose(-2, -1))
+        scores = torch.einsum('bqhd,bkhd->bhqk', queries, keys)
 
         if non_padded_mask is not None:
             # Expand the mask to have the same shape as scores
-            expanded_mask = non_padded_mask.unsqueeze(-1).unsqueeze(-1).expand(batch_size, seq_len, self.num_heads, self.num_heads)
+            expanded_mask = non_padded_mask.unsqueeze(1).unsqueeze(1).expand_as(scores)
             scores = scores.masked_fill(~expanded_mask, float('-inf'))
         
         attn_weights = torch.nn.functional.softmax(scores, dim=-1)
-        aggregated_vectors = (attn_weights @ values).view(batch_size, seq_len, -1)
+        aggregated_vectors = torch.einsum('bhqk,bkhd->bqhd', attn_weights, values).reshape(batch_size, seq_len, -1)
         combined_output = self.output_layer(aggregated_vectors)
         return combined_output
 
@@ -207,7 +207,7 @@ class AttentionNetwork(TorchModelV2, nn.Module):
         # Compute the average if in SA, since self-attention means that the
         # output is a sequence of as many vectors as the input
         if self.with_self_attn:
-            attn_output = torch.mean(attn_output, dim=0)
+            attn_output = torch.mean(attn_output, dim=1)
 
         # Concatenate the special vectors to the attention output
         combined_output = torch.cat([attn_output, special_vectors], dim=-1)
