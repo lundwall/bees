@@ -98,13 +98,11 @@ class MultiHeadAttention(nn.Module):
 
         if non_padded_mask is not None:
             # Expand the mask to have the same shape as scores
-            expanded_mask = non_padded_mask.unsqueeze(-1).unsqueeze(-1).expand(batch_size, seq_len, self.num_heads, self.num_heads)
+            expanded_mask = non_padded_mask.unsqueeze(-1).expand(batch_size, seq_len, self.num_heads)
             scores = scores.masked_fill(~expanded_mask, float('-inf'))
-
 
         attn_weights = torch.nn.functional.softmax(scores, dim=1)
         aggregated_vectors = (attn_weights.unsqueeze(-1) * values).sum(dim=1)
-
         concatenated_outputs = aggregated_vectors.view(batch_size, -1)
         combined_output = self.output_layer(concatenated_outputs)
         return combined_output
@@ -133,10 +131,9 @@ class MultiHeadSelfAttention(nn.Module):
             # Expand the mask to have the same shape as scores
             expanded_mask = non_padded_mask.unsqueeze(-1).unsqueeze(-1).expand(batch_size, seq_len, self.num_heads, self.num_heads)
             scores = scores.masked_fill(~expanded_mask, float('-inf'))
-
+        
         attn_weights = torch.nn.functional.softmax(scores, dim=-1)
         aggregated_vectors = (attn_weights @ values).view(batch_size, seq_len, -1)
-
         combined_output = self.output_layer(aggregated_vectors)
         return combined_output
 
