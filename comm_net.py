@@ -198,7 +198,7 @@ class AttentionNetwork(TorchModelV2, nn.Module):
 
         # If we're using embeddings
         if self.embedding_size != 0:
-            x = self.shared_mlp(x.view(-1, 17)).view(x.size(0), x.size(1), -1)
+            x = self.shared_mlp(x.reshape(-1, 17)).reshape(x.size(0), x.size(1), -1)
 
         attn_output = self.attention(x, non_padded_mask=non_padded_mask)
 
