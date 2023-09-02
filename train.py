@@ -35,8 +35,10 @@ class ScoreCallback(DefaultCallbacks):
     def on_episode_end(self, worker: RolloutWorker, base_env: BaseEnv,
                        policies: Dict[str, Policy], episode: Episode,
                        **kwargs):
+        # All bees keep the same score, so we just take the first one
         episode.custom_metrics['score'] = episode._last_infos["bee_0"]["score"]
 
+# Give best task for curriculum learning
 def curriculum_fn(
     train_results: dict, task_settable_env: TaskSettableEnv, env_ctx: EnvContext
 ) -> TaskType:

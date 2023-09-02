@@ -81,87 +81,108 @@ class MultiHeadAttention(nn.Module):
         for i in range(self.num_heads):
             keys = self.key_layers[i](x)
             values = self.value_layers[i](x)
-            scores = torch.matmul(keys, self.queries[i])
-            attn_weights = torch.nn.functional.softmax(scores, dim=1)
-            aggregated_vector = torch.sum(attn_weights.unsqueeze(-1) * values, dim=1)
+            scores = torch.matmul(keys, self.queries[i].unsqueeze(-1)).squeeze(-1)
+            attn_weights = torch.nn.functional.softmax(scores, dim=-1)
+            aggregated_vector = torch.sum(attn_weights.unsqueeze(1) * values, dim=0)
             outputs.append(aggregated_vector)
         concatenated_outputs = torch.cat(outputs, dim=-1)
         combined_output = self.output_layer(concatenated_outputs)
         return combined_output
 
-class AttentionModel(TorchModelV2, nn.Module):
-    def __init__(self, obs_space, action_space, num_outputs, model_config, name, embedding_size=16, hidden_size=64, num_heads=8):
+class MultiHeadSelfAttention(nn.Module):
+    def __init__(self, input_dim, num_heads):
+        super(MultiHeadSelfAttention, self).__init__()
+        self.num_heads = num_heads
+        self.key_layers = nn.ModuleList([nn.Linear(input_dim, input_dim) for _ in range(num_heads)])
+        self.value_layers = nn.ModuleList([nn.Linear(input_dim, input_dim) for _ in range(num_heads)])
+        self.query_layers = nn.ModuleList([nn.Linear(input_dim, input_dim) for _ in range(num_heads)])
+        self.output_layer = nn.Linear(input_dim * num_heads, input_dim)
+
+    def forward(self, x):
+        outputs = []
+        for i in range(self.num_heads):
+            keys = self.key_layers[i](x)
+            values = self.value_layers[i](x)
+            queries = self.query_layers[i](x)
+            scores = torch.matmul(queries, keys.transpose(-2, -1))
+            attn_weights = torch.nn.functional.softmax(scores, dim=-1)
+            aggregated_vector = torch.matmul(attn_weights, values)
+            outputs.append(aggregated_vector)
+        concatenated_outputs = torch.cat(outputs, dim=-1)
+        combined_output = self.output_layer(concatenated_outputs)
+        return combined_output
+
+class AttentionNetwork(TorchModelV2, nn.Module):
+    def __init__(self, obs_space, action_space, num_outputs, model_config, name, **kwargs):
         TorchModelV2.__init__(self, obs_space, action_space, num_outputs, model_config, name)
         nn.Module.__init__(self)
-        
-        self.attention = MultiHeadAttention(input_dim=16, num_heads=8)
+
+        self.embedding_size = kwargs["embedding_size"]
+        self.hidden_size = kwargs["hidden_size"]
+        self.num_heads = kwargs["num_heads"]
+        self.with_self_attn = kwargs["with_self_attn"]
+
+        if self.with_self_attn:
+            self.attention = MultiHeadSelfAttention(input_dim=17, num_heads=self.num_heads)
+        else:
+            self.attention = MultiHeadAttention(input_dim=17, num_heads=self.num_heads)
         
         self.policy_net = nn.Sequential(
-            nn.Linear(17, 64),
+            nn.Linear(17+9, self.hidden_size),
             nn.ReLU(),
-            nn.Linear(64, 7 + 16)
+            nn.Linear(self.hidden_size, self.hidden_size),
+            nn.ReLU(),
+            nn.Linear(self.hidden_size, 7+16)
         )
         
         self.value_net = nn.Sequential(
-            nn.Linear(17, 64),
+            nn.Linear(17+9, self.hidden_size),
             nn.ReLU(),
-            nn.Linear(64, 1)
+            nn.Linear(self.hidden_size, self.hidden_size),
+            nn.ReLU(),
+            nn.Linear(self.hidden_size, 1)
         )
 
     def forward(self, input_dict, state, seq_lens):
         x = input_dict["obs"].float()
         
+        special_vectors = x[:, 0, :9]  # Shape: [batch_size, 9]
+        
+        # Remove the special vectors from the input
+        x = x[:, 1:, :]  # Shape: [batch_size, seq_len-1, input_dim]
+        
         # Identify non-padded sequences
-        non_padded_mask = x.abs().sum(dim=-1) != 0  # Shape: [batch_size, seq_len]
+        non_padded_mask = x.abs().sum(dim=-1) != 0  # Shape: [batch_size, seq_len-1]
         
-        # Use the mask to filter out padded vectors
-        non_padded_x = [seq[mask] for seq, mask in zip(x, non_padded_mask)]
-        
+        # Handle the case where the entire tensor is zeros (e.g., during a dry run)
+        if non_padded_mask.sum() == 0:
+            self._value_out = torch.zeros((x.shape[0]))
+            return torch.zeros((x.shape[0], 7+16)), state
+
         # Process each sequence through attention
         attn_outputs = []
-        for seq in non_padded_x:
-            attn_output = self.attention(seq)
+        for seq, mask in zip(x, non_padded_mask):
+            non_padded_seq = seq[mask]
+            attn_output = self.attention(non_padded_seq)
+
+            # Compute the average if in SA, since self-attention means that the
+            # output is a sequence of as many vectors as the input
+            if self.with_self_attn:
+                attn_output = torch.mean(attn_output, dim=0)
+            
             attn_outputs.append(attn_output)
-        
+
         # Stack the attention outputs to form a single tensor
         stacked_attn_output = torch.stack(attn_outputs)
         
-        logits = self.policy_net(stacked_attn_output)
-        self._value_out = self.value_net(stacked_attn_output)
+        # Concatenate the special vectors to the attention output
+        combined_output = torch.cat([stacked_attn_output, special_vectors], dim=-1)
+
+        logits = self.policy_net(combined_output)
+        self._value_out = self.value_net(combined_output)
+
         return logits, state
 
-    def value_function(self):
-        return self._value_out.squeeze(1)
-
-
-class SelfAttentionModel(TorchModelV2, nn.Module):
-    def __init__(self, obs_space, action_space, num_outputs, model_config, name, embedding_size=16, hidden_size=64, num_heads=8):
-        TorchModelV2.__init__(self, obs_space, action_space, num_outputs, model_config, name)
-        nn.Module.__init__(self)
-        
-        self.attention = MultiHeadAttention(input_dim=17, num_heads=8)
-        
-        self.policy_net = nn.Sequential(
-            nn.Linear(17, 64),
-            nn.ReLU(),
-            nn.Linear(64, num_outputs)
-        )
-        
-        self.value_net = nn.Sequential(
-            nn.Linear(17, 64),
-            nn.ReLU(),
-            nn.Linear(64, 1)
-        )
-
-    def forward(self, input_dict, state, seq_lens):
-        x = input_dict["obs"].float()
-        non_padded_mask = x.abs().sum(dim=-1) != 0
-        # Keep only non-padded elements for each batch
-        x = [data[mask] for data, mask in zip(x, non_padded_mask)]
-        attn_output = self.attention(x)
-        logits = self.policy_net(attn_output)
-        self._value_out = self.value_net(attn_output)
-        return logits, state
 
     def value_function(self):
-        return self._value_out.squeeze(1)
+        return torch.reshape(self._value_out, [-1])

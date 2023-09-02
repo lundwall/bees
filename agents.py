@@ -106,7 +106,7 @@ class Bee(mesa.Agent):
                 a_pos[2] + b_pos[2])
 
     def see_neighbors(self):
-        return self.model.grid.get_neighbors(self.pos, include_center=False, radius=self.VISION)
+        return self.model.grid.get_neighbors(self.pos, include_center=True, radius=self.VISION)
     
     def sum_rel_pos(self, a_pos, b_pos):
         return (a_pos[0] + b_pos[0], a_pos[1] + b_pos[1])

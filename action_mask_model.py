@@ -3,7 +3,7 @@ import numpy as np
 
 from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 from ray.rllib.models.torch.complex_input_net import ComplexInputNetwork
-from comm_net import CommunicationNetwork, AttentionModel, SelfAttentionModel
+from comm_net import CommunicationNetwork, AttentionNetwork
 from ray.rllib.utils.framework import try_import_tf, try_import_torch
 from ray.rllib.utils.torch_utils import FLOAT_MIN
 
@@ -51,19 +51,8 @@ class TorchActionMaskModel(TorchModelV2, nn.Module):
         nn.Module.__init__(self)
 
         if self.comm_learning:
-            if self.with_self_attn:
-                self.internal_model = SelfAttentionModel(
-                    orig_space["observations"],
-                    action_space,
-                    num_outputs,
-                    model_config,
-                    name + "_internal",
-                    embedding_size=self.embedding_size,
-                    hidden_size=self.hidden_size,
-                    num_heads=self.num_heads,
-                )
-            elif self.with_attn:
-                self.internal_model = AttentionModel(
+            if self.with_attn or self.with_self_attn:
+                self.internal_model = AttentionNetwork(
                     orig_space["observations"],
                     action_space,
                     num_outputs,
@@ -72,6 +61,7 @@ class TorchActionMaskModel(TorchModelV2, nn.Module):
                     embedding_size=embedding_size,
                     hidden_size=hidden_size,
                     num_heads=num_heads,
+                    with_self_attn=self.with_self_attn,
                 )
             else:
                 self.internal_model = CommunicationNetwork(
