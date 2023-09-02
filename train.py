@@ -118,7 +118,7 @@ tuner = tune.Tuner(
         stop={"training_iteration": 2000},
         callbacks=[WandbLoggerCallback(project="bees", api_key_file="~/.wandb_api_key", log_config=True)] if LOG_TO_WANDB else None,
         checkpoint_config=air.CheckpointConfig(
-            checkpoint_frequency=100,
+            checkpoint_frequency=1000,
         ),
     ),
     tune_config=tune.TuneConfig(
