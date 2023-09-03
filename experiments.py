@@ -1006,7 +1006,7 @@ experiments_list = [
             "num_forests": 0,
         },
         "training_config": {
-            "experiment_name": "fcnn_naive_small",
+            "experiment_name": "fcnn_wasp_naive_small",
             "reward_shaping": False,
             "curriculum_learning": False,
         },
@@ -1044,7 +1044,7 @@ experiments_list = [
             "num_forests": 0,
         },
         "training_config": {
-            "experiment_name": "fcnn_naive_big",
+            "experiment_name": "fcnn_wasp_naive_big",
             "reward_shaping": False,
             "curriculum_learning": False,
         },
