@@ -21,6 +21,7 @@ from ray.rllib.policy import Policy
 from ray.rllib.policy.sample_batch import SampleBatch
 from typing import Dict
 import sys
+import time
 from experiments import experiments_list
 
 RESULTS_DIR = "/itet-stor/mlundwall/net_scratch/ray_results"
@@ -66,6 +67,10 @@ def curriculum_fn(
 # train.py is executed as 'python train.py $SLURM_ARRAY_TASK_ID'
 # Extract the task id to see which experiment we're running
 task_id = int(sys.argv[1])
+# Wait between runs to avoid conflicts in WandB's chosen IDs
+wait_time = (task_id - 22)*60*10
+time.sleep(wait_time)
+# Select the experiment to run
 game_config = experiments_list[task_id]["game_config"]
 training_config = experiments_list[task_id]["training_config"]
 obs_config = experiments_list[task_id]["obs_config"]
