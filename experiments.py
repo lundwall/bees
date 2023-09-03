@@ -614,7 +614,7 @@ experiments_list = [
         },
     },
     # Experiment 16
-    # Learned communication, with self-attention
+    # Learned communication, with self-attention, smaller network
     {
         "game_config": {
             "N": 10,
