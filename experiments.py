@@ -576,6 +576,82 @@ experiments_list = [
         },
     },
     # Experiment 15
+    # Learned communication, with attention, smaller network
+    {
+        "game_config": {
+            "N": 10,
+            "ends_when_no_wasps": False,
+            "side_size": 20,
+            "num_bouquets": 1,
+            "num_hives": 1,
+            "num_wasps": 0,
+            "num_forests": 0,
+        },
+        "training_config": {
+            "experiment_name": "comm_attn_small",
+            "reward_shaping": False,
+            "curriculum_learning": False,
+        },
+        "obs_config": {
+            "one_map": False,
+            "channels": False,
+            "obstacles": False,
+            "rel_pos": False,
+            "target": False,
+            "comm": True,
+            "naive_comm": False,
+            "trace": False,
+        },
+        "model_config": {
+            "no_masking": False,
+            "comm_learning": True,
+            "with_attn": True,
+            "with_self_attn": False,
+            "fcnet_hiddens": [256, 256],
+            "embedding_size": 32,
+            "hidden_size": 64,
+            "num_heads": 8,
+        },
+    },
+    # Experiment 16
+    # Learned communication, with self-attention
+    {
+        "game_config": {
+            "N": 10,
+            "ends_when_no_wasps": False,
+            "side_size": 20,
+            "num_bouquets": 1,
+            "num_hives": 1,
+            "num_wasps": 0,
+            "num_forests": 0,
+        },
+        "training_config": {
+            "experiment_name": "comm_self_attn_small",
+            "reward_shaping": False,
+            "curriculum_learning": False,
+        },
+        "obs_config": {
+            "one_map": False,
+            "channels": False,
+            "obstacles": False,
+            "rel_pos": False,
+            "target": False,
+            "comm": True,
+            "naive_comm": False,
+            "trace": False,
+        },
+        "model_config": {
+            "no_masking": False,
+            "comm_learning": True,
+            "with_attn": True,
+            "with_self_attn": True,
+            "fcnet_hiddens": [256, 256],
+            "embedding_size": 32,
+            "hidden_size": 64,
+            "num_heads": 8,
+        },
+    },
+    # Experiment 17
     # Wasp: Learned communication
     {
         "game_config": {
