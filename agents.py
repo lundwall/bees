@@ -333,7 +333,7 @@ class Bee(mesa.Agent):
         
     def make_honey(self, hive):
         hive.honey += self.nectar
-        self.model.score += hive.honey
+        self.model.score += self.nectar
         self.nectar = 0
 
 
