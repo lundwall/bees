@@ -93,7 +93,7 @@ config = config.training(
     lr=1e-4,
     lr_schedule = [
         [0, 1e-4],
-        [10_000, 2.5e-5],
+        [1_000_000, 2.5e-5],
     ],
     #train_batch_size=tune.randint(1_000, 10_000),
 )
