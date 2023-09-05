@@ -185,7 +185,7 @@ class raw_env(AECEnv):
         """
         if self.training_config["curriculum_learning"]:
             self.game_config["side_size"] = self.cur_schedule[self.cur_level]
-        self.model = Garden(game_config=self.game_config, obs_config=self.obs_config, hardcoded_bees=False, inference=False)
+        self.model = Garden(game_config=self.game_config, obs_config=self.obs_config, manual_behavior=False, inference=False)
         self.visualizer = TextGrid(self.model.grid, self.converter)
         self.agents = self.possible_agents[:]
         self.rewards = {agent: 0 for agent in self.agents}

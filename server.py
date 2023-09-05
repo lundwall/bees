@@ -4,8 +4,8 @@ from visualization.modules.HexGridVisualization import CanvasHexGrid
 from agents import Bee, BeeManual, Flower, Hive, Forest, Wasp
 from model import Garden
 
-HARDCODED_BEES = True
-TRAINING_CHECKPOINT_FILE = "/Users/marclundwall/ray_results/comm_e128_h256_nectar"
+MANUAL_BEHAVIOR = False
+TRAINING_CHECKPOINT_FILE = "/path/to/checkpoint/folder"
 
 game_config = {
     "N": 10,
@@ -20,11 +20,11 @@ obs_config = {
     "one_map": False,
     "channels": True,
     "obstacles": False,
-    "rel_pos": True,
+    "rel_pos": False,
     "target": False,
-    "comm": True,
-    "naive_comm": False,
-    "trace": False,
+    "comm": False,
+    "naive_comm": True,
+    "trace": True,
 }
 
 def Bees_portrayal(agent):
@@ -51,7 +51,7 @@ def Bees_portrayal(agent):
 canvas_element = CanvasHexGrid(Bees_portrayal, game_config["side_size"], game_config["side_size"], 600, 600)
 
 server = ModularServer(
-    Garden, [canvas_element], "Bee Garden", model_params={"game_config": game_config, "obs_config": obs_config, "seed": None, "hardcoded_bees": HARDCODED_BEES, "inference": True, "training_checkpoint": TRAINING_CHECKPOINT_FILE}
+    Garden, [canvas_element], "Bee Garden", model_params={"game_config": game_config, "obs_config": obs_config, "seed": None, "manual_behavior": MANUAL_BEHAVIOR, "inference": True, "training_checkpoint": TRAINING_CHECKPOINT_FILE}
 )
 # Not necessary with the `mesa runserver` command
 # server.launch()

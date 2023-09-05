@@ -3,7 +3,7 @@
 #SBATCH --output=%j.out     # where to store the output (%j is the JOBID), subdirectory "log" must exist
 #SBATCH --cpus-per-task=16
 #SBATCH --exclude=artongpu01,tikgpu[01-10]
-#SBATCH --array=2-7
+#SBATCH --array=0-27
 
 # Exit on errors
 set -o errexit
@@ -28,11 +28,9 @@ echo "In directory:    $(pwd)"
 echo "Starting on:     $(date)"
 echo "SLURM_JOB_ID:    ${SLURM_JOB_ID}"
 
-# Set WandB dir
-# export WANDB_CONFIG_DIR=/itet-stor/mlundwall/net_scratch/wandb
 
 # Binary or script to execute
-/itet-stor/mlundwall/net_scratch/conda_envs/bees/bin/python /home/mlundwall/bees/train.py $SLURM_ARRAY_TASK_ID
+/itet-stor/USERNAME/net_scratch/conda_envs/bees/bin/python /path/to/bees/train.py $SLURM_ARRAY_TASK_ID
 
 # Send more noteworthy information to the output log
 echo "Finished at:     $(date)"

@@ -345,6 +345,7 @@ class BeeManual(Bee):
         # We only need the relative positions here
         obs_config = {
             "one_map": False,
+            "obstacles": False,
             "channels": False,
             "rel_pos": True,
             "target": True,

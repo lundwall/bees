@@ -24,8 +24,7 @@ import sys
 import time
 from experiments import experiments_list
 
-RESULTS_DIR = "/itet-stor/mlundwall/net_scratch/ray_results"
-RESTORE_CHECKPOINT = ""
+RESULTS_DIR = "/itet-stor/USERNAME/net_scratch/ray_results"
 LOG_TO_WANDB = True
 
 # Limit number of cores
@@ -67,7 +66,7 @@ def curriculum_fn(
 # train.py is executed as 'python train.py $SLURM_ARRAY_TASK_ID'
 # Extract the task id to see which experiment we're running
 task_id = int(sys.argv[1])
-# Wait between runs to avoid conflicts in WandB's chosen IDs
+# Wait 10 min between each run to avoid conflicts in WandB's chosen IDs
 wait_time = (task_id - 22)*60*10
 time.sleep(wait_time)
 # Select the experiment to run
@@ -91,6 +90,8 @@ config = config.training(
     },
     grad_clip=40.0,
     lr=1e-4,
+    # Linearly decrease learning rate to avoid gradient explosion
+    # Should not happen anyway with gradient clipping
     lr_schedule = [
         [0, 1e-4],
         [1_000_000, 2.5e-5],
@@ -107,9 +108,9 @@ config = config.environment(
     env_task_fn=curriculum_fn if training_config["curriculum_learning"] else NotProvided,
 )
 
+# For hyperparameter tuning
 current_best_params = [
     {"lr": 5e-5, "train_batch_size": 4000},
-    #{"train_batch_size": 4000, "rollout_fragment_length": 2000},
 ]
 hyperopt_search = HyperOptSearch(
             metric="episode_reward_mean", mode="max",
@@ -128,6 +129,7 @@ tuner = tune.Tuner(
     ),
     tune_config=tune.TuneConfig(
         num_samples=5,
+        # Uncomment the following to use Ray Tune's automatic hypermarameter search
         #search_alg=hyperopt_search,
         #scheduler=AsyncHyperBandScheduler(
         #    time_attr="training_iteration",
@@ -137,19 +139,7 @@ tuner = tune.Tuner(
         #    grace_period=10,
         #),
     ),
-    param_space=config.to_dict(),
-    _tuner_kwargs={
-        "restore": RESTORE_CHECKPOINT
-    } if RESTORE_CHECKPOINT else None,
+    param_space=config.to_dict()
 )
-# tuner = tuner.restore(path="/itet-stor/mlundwall/net_scratch/ray_results/comm_full_nectar", trainable="PPO", )
-# tune.run("PPO", config=config, checkpoint_freq=1000, stop={"training_iteration": 6000}, restore="/itet-stor/mlundwall/net_scratch/ray_results/comm_full_nectar", resume=True)
 results = tuner.fit()
 print("Best hyperparameters found were: ", results.get_best_result(metric="episode_reward_mean", mode="max").config)
-
-# Train without tuning
-# algo = PPOConfig().environment('environment').build()
-# for i in range(10001):
-#     algo.train()
-#     if i % 100 == 0:
-#         algo.save(prevent_upload=True)

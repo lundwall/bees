@@ -6,11 +6,11 @@ class Garden(mesa.Model):
     A model with some number of bees.
     """
 
-    def __init__(self, game_config = {}, obs_config = {}, seed = None, hardcoded_bees = False, inference = False, training_checkpoint = None) -> None:
+    def __init__(self, game_config = {}, obs_config = {}, seed = None, manual_behavior = False, inference = False, training_checkpoint = None) -> None:
         self.game_config = game_config
         self.inference = inference
-        self.hardcoded_bees = hardcoded_bees
-        if not self.hardcoded_bees and self.inference:
+        self.manual_behavior = manual_behavior
+        if not self.manual_behavior and self.inference:
             # Here we are in inference mode
             from ray.rllib.algorithms.ppo import PPO
             from ray.tune.registry import register_env
@@ -24,7 +24,7 @@ class Garden(mesa.Model):
             register_env('environment', lambda config: PettingZooEnv(env_creator(config)))
             self.algo = PPO.from_checkpoint(training_checkpoint)
 
-        if self.hardcoded_bees:
+        if self.manual_behavior:
             bee_class = BeeManual
         else:
             bee_class = Bee
