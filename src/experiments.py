@@ -4,35 +4,17 @@
 # - obs_config
 # - model_config
 default_config = {
-    "task_config": {
-        "num_workers": 10,
-        "observation_radius": 4,
-        "communication_radius": 4,
-        
-        "synchrounous_execution": True,
-    },
-    "model_config": {
-        "seed": 11,
-        "grid_width": 30,
-        "grid_height": 8,
-        "max_rounds": 100,
-    },
+    "mesa_grid_width": 30,
+    "mesa_grid_height": 8,
 
-    "training_config": {
-        "experiment_name": "fcnn_naive_small",
-        "reward_shaping": False,
-        "curriculum_learning": False,
-    },
-    "obs_config": {
-        "one_map": False,
-        "channels": True,
-        "obstacles": False,
-        "rel_pos": False,
-        "target": False,
-        "comm": False,
-        "naive_comm": True,
-        "trace": True,
-    },
+    "num_agents": 10,
+    "n_hidden_vec": 8,
+    "n_comm_vec": 2,
+    "n_visibility_range": 4,
+    "n_comm_range": 4,
+
+    "max_rounds": 50,
+    "apply_actions_synchronously": True,
     
 }
 

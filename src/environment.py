@@ -14,14 +14,14 @@ from pettingzoo.utils import agent_selector, wrappers
 
 MAX_ROUNDS = 100
 
-def env(render_mode=None, task="communication_v0", task_config={}, model_config={}):
+def env(render_mode=None, task="communication_v0", config={}):
     """
     returns functional aec environment, wrapped in helpful wrappers
     """    
     # select desired environment
     env = None
     if task == "communication_v0":
-        env = CommunicationV0_env(render_mode=render_mode, task_config=task_config, model_config=model_config)
+        env = CommunicationV0_env(config, render_mode=render_mode)
     else:
         print("unkown task, could not find environment")
         quit()
@@ -39,22 +39,21 @@ class CommunicationV0_env(AECEnv):
     """
     metadata = {"render_modes": ["ascii"], "name": "communication_v0"}
 
-    def __init__(self, render_mode=None, task_config={}, model_config={}):
+    def __init__(self, config, render_mode=None):
         """
         from AECEnv, init() has to initialize:
         - possible_agents
         - render_mode (from gym environment)
         """
         # config
-        self.task_config = task_config
-        self.model_config = model_config
+        self.config = config
 
-        # setup model
-        self.model = CommunicationV0_model(task_config=task_config, model_config=self.model_config)
-        self.possible_agents, self.agent_name_to_id =  self.model.get_possible_agents()
+        # setup mesa model
+        self.model = CommunicationV0_model(config)
+        self.possible_agents, self.agent_to_id =  self.model.get_possible_agents()
 
-        # setup synchronization 
-        self.run_synchronous = self.task_config["synchrounous_execution"]
+        # setup synchrounous run 
+        self.buffer_actions = self.config["apply_actions_synchronously"]
         self.action_buffer = dict() # {agent_id: action}
 
         self.render_mode = render_mode
@@ -70,45 +69,33 @@ class CommunicationV0_env(AECEnv):
         if type(agent) is Worker:
             return '∆'
         elif type(agent) is Oracle:
-            return '@'
+            return f'={agent.get_state()}='
         elif type(agent) is Plattform:
-            return 'X'
+            return '|∆|' if agent.is_occupied() else "| |"
 
-    # @todo: define observation space
     @functools.lru_cache(maxsize=None)
     def observation_space(self, agent):
-        # calculate van Neumann neighborhood size 
-        vn_radius = self.task_config["observation_radius"]
-        vn_nhood_size = vn_radius * vn_radius + (vn_radius + 1) * (vn_radius + 1)
-
-        # create individual spaces
-        trace = Discrete(2, shape=(vn_nhood_size,))
-        adj_workers = Discrete(2, shape=(vn_nhood_size,))
-        adj_oracle = Discrete(2, shape=(vn_nhood_size,))
-        adj_lightswitch = Discrete(2, shape=(vn_nhood_size,))
-
-        obs_space = Tuple(
-            trace,
-            adj_workers,
-            adj_oracle,
-            adj_lightswitch
-        )
-        action_mask = Box(0, 1, shape=(9,), dtype=np.int8)
+        """
+        return action space for the given agent
+        """ 
+        agent_id = self.agent_to_id[agent]
+        return self.model.get_obs_space(agent_id=agent_id)
         
-        return Dict({'observations': obs_space, 'action_mask': action_mask})
     
-    # @todo: define action space
     @functools.lru_cache(maxsize=None)
     def action_space(self, agent):
         """
-        -1,0,1 for vertical movement
-        -1,0,1 for horizontal movement
-        @todo: internal state for communication
+        return action space for the given agent
         """
-        return Tuple(
-            Discrete(3, start=-1, dtype=np.uint8),
-            Discrete(3, start=-1, dtype=np.uint8),
-        )
+        agent_id = self.agent_to_id[agent]
+        return self.model.get_action_space(agent_id=agent_id)
+
+
+    def observe(self, agent):
+        """
+        return observation of the given agent (can be outdated)
+        """
+        return self.observations[agent]
 
 
     def render(self):
@@ -125,19 +112,6 @@ class CommunicationV0_env(AECEnv):
             print("round number: ", self.num_rounds)
             print(self.visualizer.render())
 
-    def observe(self, agent):
-        """
-        return observation of the given agent (can be outdated)
-        """
-        return self.observations[agent]
-
-    def close(self):
-        """
-        Close should release any graphical displays, subprocesses, network connections
-        or any other environment data which should not be kept around after the
-        user is no longer using the environment.
-        """
-        pass
 
     def reset(self, seed=None, options=None):
         """
@@ -153,7 +127,7 @@ class CommunicationV0_env(AECEnv):
         - agent_selection
         and must set up the environment so that render(), step(), and observe() can be called without issues.
         """
-        self.model = CommunicationV0_model(model_config=self.model_config)
+        self.model = CommunicationV0_model(config=self.config)
         self.agents = self.possible_agents[:]
         self.observations = {agent: None for agent in self.agents}
         self.rewards = {agent: 0 for agent in self.agents}
@@ -170,7 +144,7 @@ class CommunicationV0_env(AECEnv):
         self._agent_selector = agent_selector(self.agents)
         self.agent_selection = self._agent_selector.next()
 
-    def step(self, action):
+    def step(self, action) -> None:
         """
         from AECEnv: apply action for the current agent (specified by agent_selection), update
         - rewards
@@ -188,31 +162,27 @@ class CommunicationV0_env(AECEnv):
             return
         
         # get agent
-        agent_name, agent_id = self.agent_selection, self.agent_name_to_id[self.agent_selection]
+        agent = self.agent_selection
         is_last = self._agent_selector.is_last()
 
-        # progress the simulation
-        self.action_buffer[agent_id] = action
-        if not self.run_synchronous or is_last:
-            self.execute_action_buffer()
+        # add action to buffer and progress the simulation if necessary
+        self.action_buffer[agent] = action
+        if not self.buffer_actions or is_last:
+            self.progress_simulation()
 
-        # kill the game after max_rounds
         if is_last:
             self.num_rounds += 1
-            if self.num_rounds >= self.model_config["max_rounds"]:
+            self.compute_and_assign_reward()
+            
+            # kill the game after max_rounds
+            if self.num_rounds >= self.config["max_rounds"]:
                 for a in self.agents:
                     self.truncations[a] = True
-
-
-        # @todo: calculate reward
-        self._clear_rewards()
-
-        reward = 0
-        self.rewards[agent_name] = reward
+        else:
+            self._clear_rewards()
 
         # selects the next agent.
-        if self._agent_selector.agent_order:
-            self.agent_selection = self._agent_selector.next()
+        self.agent_selection = self._agent_selector.next()
 
         # Adds .rewards to ._cumulative_rewards
         self._accumulate_rewards()
@@ -221,16 +191,43 @@ class CommunicationV0_env(AECEnv):
         if self.render_mode == "ascii":
             self.render()
 
-        # @todo: update self.observations
 
-        return
-
-    def execute_action_buffer(self) -> None:
+    def progress_simulation(self) -> None:
         """
-        execute all actions in the action buffer and clear the buffer
+        execute all actions in the action buffer and update the observations of the agents accordingly
+        finally clear the action_buffer
         """
-        for agent_id in self.action_buffer.keys():
+        # step
+        for agent in self.action_buffer.keys():
+            agent_id = self.agent_to_id[agent]
             self.model.step(agent_id=agent_id, action=self.action_buffer[agent_id])
             self.num_moves += 1
+        
+        # update observations
+        for agent in self.action_buffer.keys():
+            agent_id = self.agent_to_id[agent]
+            self.observations[agent] = self.model.observe(agent_id=agent_id)
 
         self.action_buffer.clear()
+
+    def compute_and_assign_reward(self) -> None:
+        """
+        calculate reward and assign it to all agents
+        """
+        reward = 0
+
+        """
+        oracle= 0
+        plattform = 1
+        reward = -1
+
+        oracle = 1
+        plattform = 1
+        reward = 1
+
+        oracle = 1
+        plattform = 0
+        reward = -1
+        """
+
+        self.rewards = {agent: reward for agent in self.agents}
