@@ -1,7 +1,8 @@
 import gymnasium
 import mesa
-from agents import Plattform, Worker, Oracle
 from math import floor
+
+from models.communication_v0.agents import Plattform, Worker, Oracle
 
 class CommunicationV0_model(mesa.Model):
     """
@@ -10,22 +11,37 @@ class CommunicationV0_model(mesa.Model):
     """
 
     def __init__(self, config, policy_net=None) -> None:
+        super().__init__()
         self.config = config
         self.policy_net = policy_net # not None in inference mode
-        self.running = True
 
         # create model
         # grid coordinates:
         #   bottom left = (0,0)
         #   top right = (height-1, width-1)
-        self.grid = mesa.space.MultiGrid(self.model_config["mesa_grid_width"], self.model_config["mesa_grid_height"], False)
+        self.grid = mesa.space.MultiGrid(self.config["mesa_grid_width"], self.config["mesa_grid_height"], False)
         self.schedule = mesa.time.BaseScheduler(self)
         self.possible_agents = []
         self.agent_name_to_id = {}
 
+
+        # create workers
+        for _ in range(self.config["num_agents"]):
+            new_worker = Worker(self.next_id(), self, 
+                                n_hidden_vec=self.config["n_hidden_vec"],
+                                n_comm_vec=self.config["n_comm_vec"],
+                                n_visibility_range=self.config["n_visibility_range"],
+                                n_comm_range=self.config["n_comm_range"],
+                                n_trace_length=self.config["n_trace_length"])
+            self.schedule.add(new_worker)
+            self.grid.place_agent(agent=new_worker, pos=(0,0))
+            
+            self.possible_agents.append(new_worker.name)
+            self.agent_name_to_id[new_worker.name] = new_worker.unique_id
+
         # create oracle and lightswitch
-        x_max = self.env_config["mesa_grid_width"] - 1
-        y_max = self.env_config["mesa_grid_height"] - 1
+        x_max = self.config["mesa_grid_width"] - 1
+        y_max = self.config["mesa_grid_height"] - 1
         y_mid = floor(y_max / 2)
         
         margin = 2
@@ -38,24 +54,14 @@ class CommunicationV0_model(mesa.Model):
         self.plattform = Plattform(self.next_id(), self)
         self.grid.place_agent(agent=self.plattform, pos=(x_plattform, y_mid))
 
-        # create workers
-        for _ in range(self.config["num_agents"]):
-            new_worker = Worker(self.next_id(), self, 
-                                n_hidden_state=self.config["n_hidden_vec"],
-                                n_comm_state=self.config["n_comm_vec"],
-                                n_visibility_range=self.config["n_visibility_range"],
-                                n_comm_range=self.config["n_comm_range"],
-                                n_trace_length=self.config["n_trace_length"])
-            self.schedule.add(new_worker)
-            self.grid.move_to_empty(new_worker)
-            
-            self.possible_agents.append(new_worker.name)
-            self.agent_name_to_id[new_worker.name] = new_worker.unique_id
+    def next_id(self) -> int:
+        """Return the next unique ID for agents, increment current_id"""
+        curr_id = self.current_id
+        self.current_id += 1
+        return curr_id
 
     def get_oracle_and_plattform(self) -> [Oracle, Plattform]:
-        """
-        returns oracle and plattform agents
-        """
+        """returns oracle and plattform agents"""
         return self.oracle, self.plattform
 
     def get_possible_agents(self) -> [list, dict]:
@@ -85,14 +91,3 @@ class CommunicationV0_model(mesa.Model):
     def get_obs_space(self, agent_id) -> gymnasium.spaces.Space:
         agent = self.schedule.agents[agent_id]
         return agent.get_obs_space()
-
-
-    # @todo: make synchronous
-    def run_model(self, max_steps: int = 50) -> None:
-        for _ in range(max_steps):
-            # step through all agents one after another
-            self.schedule.step()
-            
-            # check if execution finished early
-            if not self.running:
-                break

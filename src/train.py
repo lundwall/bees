@@ -22,22 +22,14 @@ from ray.rllib.policy.sample_batch import SampleBatch
 from typing import Dict
 import sys
 import time
-from experiments import experiments_list
+from experiments import default_config
 
 
 # Limit number of cores
 ray.init(num_cpus=2)
 
-
-# Select the experiment to run
-game_config = experiments_list[task_id]["game_config"]
-training_config = experiments_list[task_id]["training_config"]
-obs_config = experiments_list[task_id]["obs_config"]
-model_config = experiments_list[task_id]["model_config"]
-
-env_creator = lambda config: environment.env(game_config=config["game_config"], training_config=config["training_config"], obs_config=config["obs_config"])
 # register that way to make the environment under an rllib name
-register_env('environment', lambda config: PettingZooEnv(env_creator(config)))
+register_env('environment', lambda config: PettingZooEnv(environment.env(config=default_config)))
 
 config = PPOConfig()
 config = config.rollouts(num_rollout_workers=2, num_envs_per_worker=2)

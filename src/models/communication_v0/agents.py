@@ -43,11 +43,11 @@ class Worker(mesa.Agent):
     def get_obs_space(self) -> gymnasium.spaces.Space:
         # calculate moore neighborhood size 
 
-        bin_trace = Discrete(2, shape=(self.nh_size,), dtype=np.int8)
-        bin_plattform = Discrete(2, shape=(self.nh_size,), dtype=np.int8)
-        bin_plattform_occupation = Discrete(3, shape=(1,), dtype=np.int8) # -1 if not visible
-        bin_oracle = Discrete(2, shape=(self.nh_size,), dtype=np.int8)
-        bin_oracle_directives = Discrete(3, shape=(1,), dtype=np.int8) # -1 if not visible
+        bin_trace = Discrete(2, shape=(self.nh_size,))
+        bin_plattform = Discrete(2, shape=(self.nh_size,))
+        bin_plattform_occupation = Discrete(3, shape=(1,)) # -1 if not visible
+        bin_oracle = Discrete(2, shape=(self.nh_size,))
+        bin_oracle_directives = Discrete(3, shape=(1,)) # -1 if not visible
         comm_workers = Box(0, 1, shape=(self.nh_size, self.n_comm_vec), dtype=np.float64)
         obs_space = Tuple(
             bin_trace,
@@ -58,25 +58,22 @@ class Worker(mesa.Agent):
             comm_workers
         )
 
-        action_mask = Box(0, 1, shape=self.get_action_space().shape, dtype=np.int8)
-
-        return Dict({'observations': obs_space, 'action_mask': action_mask})
+        return obs_space
     
     def observe(self) -> dict:
         """
         return observed environment of the agent
         """
-        neighbors = self.model.grid.get_neighbors(self.pos, moore=self.moore_nh, Tradius=self.n_visibility_range)
+        neighbors = self.model.grid.get_neighbors(self.pos, moore=self.moore_nh, radius=self.n_visibility_range)
 
-        bin_trace = np.zeros(shape=(self.nh_size,), dtype=np.int8)
-        bin_plattform = np.zeros(shape=(self.nh_size,), dtype=np.int8)
-        bin_plattform_occupation = np.array([-1], dtype=np.int8)
-        bin_oracle = np.zeros(shape=(self.nh_size,), dtype=np.int8)
-        bin_oracle_directives = np.array([-1], dtype=np.int8)
+        bin_trace = np.zeros(shape=(self.nh_size,))
+        bin_plattform = np.zeros(shape=(self.nh_size,))
+        bin_plattform_occupation = np.array([-1])
+        bin_oracle = np.zeros(shape=(self.nh_size,))
+        bin_oracle_directives = np.array([-1])
         comm_workers = np.zeros((self.nh_size, self.n_comm_vec), dtype=np.float64)
         
         for n in neighbors:
-            assert type(n) is mesa.Agent
             rel_pos = get_relative_pos(self.pos, n.pos)
 
             if type(n) is Worker:
@@ -91,7 +88,7 @@ class Worker(mesa.Agent):
                 bin_plattform[relative_moore_to_linear(rel_pos, radius=self.n_visibility_range)] = 1
                 bin_plattform_occupation[0] = n.is_occupied()
 
-        obs = Tuple(
+        obs = (
             bin_trace,
             bin_plattform,
             bin_plattform_occupation,
@@ -101,16 +98,29 @@ class Worker(mesa.Agent):
         )
 
         # calculate action mask based on grid
-        action_mask = np.zeros(shape=self.get_action_space().shape, dtype=np.int8)
+        right_mask = np.zeros(shape=(1,), dtype=np.int8)
+        left_mask = np.zeros(shape=(1,), dtype=np.int8)
+        up_mask = np.zeros(shape=(1,), dtype=np.int8)
+        down_mask = np.zeros(shape=(1,), dtype=np.int8)
+        c_mask = np.zeros(shape=(self.n_comm_vec,), dtype=np.int8)
+
         x_curr, y_curr = self.pos
         if self.model.grid.out_of_bounds((x_curr + 1, y_curr)):
-            action_mask[0] = 1
+            right_mask[0] = 1
         if self.model.grid.out_of_bounds((x_curr - 1, y_curr)):
-            action_mask[1] = 1
+            left_mask[0] = 1
         if self.model.grid.out_of_bounds((x_curr, y_curr + 1)):
-            action_mask[2] = 1
+            up_mask[0] = 1
         if self.model.grid.out_of_bounds((x_curr, y_curr - 1)):
-            action_mask[3] = 1            
+            down_mask[0] = 1 
+
+        action_mask = (
+            right_mask,
+            left_mask,
+            up_mask,
+            down_mask,
+            None
+        )           
 
         observation = {"observations": obs, "action_mask": action_mask}
         return observation
@@ -121,20 +131,20 @@ class Worker(mesa.Agent):
         h:      internal state
         c:      communication output
         """
-        right = Discrete(2, dtype=np.int8)
-        left = Discrete(2, dtype=np.int8)
-        up = Discrete(2, dtype=np.int8)
-        down = Discrete(2, dtype=np.int8)
+        right = Discrete(1)
+        left = Discrete(1)
+        up = Discrete(1)
+        down = Discrete(1)
         h = Box(0, 1, shape=(self.n_hidden_vec,), dtype=np.float32)
         c = Box(0, 1, shape=(self.n_comm_vec,), dtype=np.float32)
 
         return Tuple(
-            right,
+            [right,
             left,
             up,
             down,
             # h,
-            c
+            c]
         )
 
     def step(self, action=None) -> None:
@@ -147,12 +157,12 @@ class Worker(mesa.Agent):
             action = self.model.policy_net.compute_single_action(obs)
 
         # decode action
-        move_x, move_y, c = action
+        right, left, up, down, c = action
 
         # move agent
         x_curr, y_curr = self.pos
-        x_updated = x_curr + move_x
-        y_updated = y_curr + move_y
+        x_updated = x_curr + right - left
+        y_updated = y_curr + up - down
         pos_updated = (x_updated, y_updated)
         assert not self.model.grid.out_of_bounds(pos_updated), "action masking failed, agent out-of-bounds"
 
@@ -174,7 +184,7 @@ class Plattform(mesa.Agent):
         self.name = f"plattform_{unique_id}"
 
     def is_occupied(self) -> List[mesa.Agent]:
-        return len(self.model.grid.get_neighbors(self.pos, include_center=True, radius=0)) > 0
+        return len(self.model.grid.get_neighbors(self.pos, moore=True, include_center=True, radius=0)) > 0
 
 
 class Oracle(mesa.Agent):

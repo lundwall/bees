@@ -1,24 +1,18 @@
 
-from src.models.communication_v0.model import CommunicationV0_model
-from src.models.communication_v0.agents import Worker, Oracle, Plattform
-from visualization.TextVisualization import TextGrid
-
 import functools
-
 import gymnasium
-import numpy as np
-
 from pettingzoo import AECEnv
 from pettingzoo.utils import agent_selector, wrappers
 
-MAX_ROUNDS = 100
+from models.communication_v0.model import CommunicationV0_model
+from models.communication_v0.agents import Worker, Oracle, Plattform
+
 
 def env(render_mode=None, task="communication_v0", config={}):
     """
     returns functional aec environment, wrapped in helpful wrappers
     """    
     # select desired environment
-    env = None
     if task == "communication_v0":
         env = CommunicationV0_env(config, render_mode=render_mode)
     else:
@@ -36,7 +30,7 @@ class CommunicationV0_env(AECEnv):
     base environment to learn communication.
     an oracle outputs information if the agents should step on a particular field. once the oracle says "go" or field_nr or so, the agents get rewarded once on the field
     """
-    metadata = {"render_modes": ["ascii"], "name": "communication_v0"}
+    metadata = {"render_modes": ["minimal"], "name": "communication_v0"}
 
     def __init__(self, config, render_mode=None):
         """
@@ -56,7 +50,7 @@ class CommunicationV0_env(AECEnv):
         self.action_buffer = dict() # {agent_id: action}
 
         self.render_mode = render_mode
-        self.visualizer = TextGrid(self.model.grid, self.agent_to_ascii)
+        # self.visualizer = TextGrid(self.model.grid, self.agent_to_ascii)
 
 
     # @todo: rework
@@ -93,6 +87,8 @@ class CommunicationV0_env(AECEnv):
         """
         return observation of the given agent (can be outdated)
         """
+        if not self.observations[agent]:
+            self.observations[agent] = self.model.observe(self.agent_to_id[agent])
         return self.observations[agent]
 
 
@@ -106,9 +102,9 @@ class CommunicationV0_env(AECEnv):
                 "You are calling render method without specifying any render mode."
             )
             return
-        elif self.render_mode is "ascii":
-            print("round number: ", self.num_rounds)
-            print(self.visualizer.render())
+        elif self.render_mode == "minimal":
+            print(f"round={self.n_rounds}, step={self.n_steps}")
+            #print(self.visualizer.render())
 
 
     def reset(self, seed=None, options=None):
@@ -135,8 +131,8 @@ class CommunicationV0_env(AECEnv):
         self.infos = {agent: {} for agent in self.agents}
         
         # track 'time'
-        self.num_moves = 0
-        self.num_rounds = 0
+        self.n_steps = 0
+        self.n_rounds = 0
 
         # allows easy cyclic stepping through the agents list
         self._agent_selector = agent_selector(self.agents)
@@ -169,11 +165,10 @@ class CommunicationV0_env(AECEnv):
             self.progress_simulation()
 
         if is_last:
-            self.num_rounds += 1
             self.compute_and_assign_reward()
             
             # kill the game after max_rounds
-            if self.num_rounds >= self.config["max_rounds"]:
+            if self.n_rounds >= self.config["max_rounds"]:
                 for a in self.agents:
                     self.truncations[a] = True
         else:
@@ -186,8 +181,11 @@ class CommunicationV0_env(AECEnv):
         self._accumulate_rewards()
         self._deads_step_first()
 
-        if self.render_mode == "ascii":
+        if self.render_mode:
             self.render()
+
+        self.n_steps += 1
+        self.n_rounds += 1 if is_last else 0
 
 
     def progress_simulation(self) -> None:
@@ -198,8 +196,7 @@ class CommunicationV0_env(AECEnv):
         # step
         for agent in self.action_buffer.keys():
             agent_id = self.agent_to_id[agent]
-            self.model.step(agent_id=agent_id, action=self.action_buffer[agent_id])
-            self.num_moves += 1
+            self.model.step(agent_id=agent_id, action=self.action_buffer[agent])
         
         # update observations
         for agent in self.action_buffer.keys():
