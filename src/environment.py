@@ -7,7 +7,6 @@ import functools
 
 import gymnasium
 import numpy as np
-from gymnasium.spaces import Discrete, Box, Tuple, Dict
 
 from pettingzoo import AECEnv
 from pettingzoo.utils import agent_selector, wrappers
@@ -65,7 +64,6 @@ class CommunicationV0_env(AECEnv):
         """
         translates agent to ascii sign for printing
         """
-        #@todo: 0 or 1 depending on if  he want to change the lightswitch
         if type(agent) is Worker:
             return '∆'
         elif type(agent) is Oracle:
@@ -212,11 +210,8 @@ class CommunicationV0_env(AECEnv):
 
     def compute_and_assign_reward(self) -> None:
         """
-        calculate reward and assign it to all agents
-        """
-        reward = 0
+        calculate reward and assign it to all agents at end of episode
 
-        """
         oracle= 0
         plattform = 1
         reward = -1
@@ -229,5 +224,17 @@ class CommunicationV0_env(AECEnv):
         plattform = 0
         reward = -1
         """
+        oracle, plattform = self.model.get_oracle_and_plattform()
+        
+        occupation_order = oracle.get_state()
+        is_occupied = plattform.is_occupied()
+
+        reward = 0
+        if not occupation_order and is_occupied:
+            reward = -1
+        elif occupation_order and not is_occupied:
+            reward = -1
+        elif occupation_order and is_occupied:
+            reward = 10
 
         self.rewards = {agent: reward for agent in self.agents}

@@ -4,6 +4,8 @@ from gymnasium.spaces import Discrete, Box, Tuple, Dict
 import numpy as np
 import mesa
 from typing import List
+
+from utils import get_relative_pos, relative_moore_to_linear
     
 class Worker(mesa.Agent):
     """
@@ -13,33 +15,105 @@ class Worker(mesa.Agent):
                  n_hidden_vec: int = 8,
                  n_comm_vec: int = 8,
                  n_visibility_range: int = 4,
-                 n_comm_range: int = 4,):
+                 n_comm_range: int = 4,
+                 n_trace_length: int = 1):
         super().__init__(unique_id, model)
         self.name = f"worker_{unique_id}"
 
-        self.n_hidden_vec = n_hidden_vec
-        self.n_comm_vec = n_comm_vec
+        # neighborhood variables
         self.n_visibility_range = n_visibility_range
+        self.moore_nh = True
+        self.nh_size = (2 * self.n_visibility_range + 1)**2
+
+        # internal state
         self.n_comm_range = n_comm_range
+        self.n_comm_vec = n_comm_vec
+        self.comm_vec = np.zeros(shape=(n_comm_vec,))
+        
+        self.n_hidden_vec = n_hidden_vec
+        self.hidden_vec = np.zeros(shape=(n_hidden_vec,))
+        
+        self.n_trace_length = n_trace_length
+        self.pos_history = list()
+
+
+    def get_comm_vec(self) -> np.array:
+        return self.comm_vec
 
     def get_obs_space(self) -> gymnasium.spaces.Space:
         # calculate moore neighborhood size 
-        n_moore_nh = (2 * self.n_visibility_range + 1)**2
 
-        bin_trace = Discrete(2, shape=(n_moore_nh,))
-        bin_lightswitch = Discrete(2, shape=(n_moore_nh,))
-        bin_oracle = Discrete(2, shape=(n_moore_nh,))
-        comm_workers = Box(0, 1, shape=(n_moore_nh, self.n_comm_vec), dtype=np.float64)
+        bin_trace = Discrete(2, shape=(self.nh_size,), dtype=np.int8)
+        bin_plattform = Discrete(2, shape=(self.nh_size,), dtype=np.int8)
+        bin_plattform_occupation = Discrete(3, shape=(1,), dtype=np.int8) # -1 if not visible
+        bin_oracle = Discrete(2, shape=(self.nh_size,), dtype=np.int8)
+        bin_oracle_directives = Discrete(3, shape=(1,), dtype=np.int8) # -1 if not visible
+        comm_workers = Box(0, 1, shape=(self.nh_size, self.n_comm_vec), dtype=np.float64)
         obs_space = Tuple(
             bin_trace,
-            bin_lightswitch,
+            bin_plattform,
+            bin_plattform_occupation,
             bin_oracle,
+            bin_oracle_directives,
             comm_workers
         )
 
         action_mask = Box(0, 1, shape=self.get_action_space().shape, dtype=np.int8)
 
         return Dict({'observations': obs_space, 'action_mask': action_mask})
+    
+    def observe(self) -> dict:
+        """
+        return observed environment of the agent
+        """
+        neighbors = self.model.grid.get_neighbors(self.pos, moore=self.moore_nh, Tradius=self.n_visibility_range)
+
+        bin_trace = np.zeros(shape=(self.nh_size,), dtype=np.int8)
+        bin_plattform = np.zeros(shape=(self.nh_size,), dtype=np.int8)
+        bin_plattform_occupation = np.array([-1], dtype=np.int8)
+        bin_oracle = np.zeros(shape=(self.nh_size,), dtype=np.int8)
+        bin_oracle_directives = np.array([-1], dtype=np.int8)
+        comm_workers = np.zeros((self.nh_size, self.n_comm_vec), dtype=np.float64)
+        
+        for n in neighbors:
+            assert type(n) is mesa.Agent
+            rel_pos = get_relative_pos(self.pos, n.pos)
+
+            if type(n) is Worker:
+                comm_workers[relative_moore_to_linear(rel_pos, radius=self.n_visibility_range)] = n.get_comm_vec()
+                # add trace
+                for p in self.pos_history:
+                    bin_trace[relative_moore_to_linear(get_relative_pos(self.pos, p), radius=self.n_visibility_range)] = 1
+            elif type(n) is Oracle:
+                bin_oracle[relative_moore_to_linear(rel_pos, radius=self.n_visibility_range)] = 1
+                bin_oracle_directives[0] = n.get_state()
+            elif type(n) is Plattform:
+                bin_plattform[relative_moore_to_linear(rel_pos, radius=self.n_visibility_range)] = 1
+                bin_plattform_occupation[0] = n.is_occupied()
+
+        obs = Tuple(
+            bin_trace,
+            bin_plattform,
+            bin_plattform_occupation,
+            bin_oracle,
+            bin_oracle_directives,
+            comm_workers
+        )
+
+        # calculate action mask based on grid
+        action_mask = np.zeros(shape=self.get_action_space().shape, dtype=np.int8)
+        x_curr, y_curr = self.pos
+        if self.model.grid.out_of_bounds((x_curr + 1, y_curr)):
+            action_mask[0] = 1
+        if self.model.grid.out_of_bounds((x_curr - 1, y_curr)):
+            action_mask[1] = 1
+        if self.model.grid.out_of_bounds((x_curr, y_curr + 1)):
+            action_mask[2] = 1
+        if self.model.grid.out_of_bounds((x_curr, y_curr - 1)):
+            action_mask[3] = 1            
+
+        observation = {"observations": obs, "action_mask": action_mask}
+        return observation
 
     def get_action_space(self) -> gymnasium.spaces.Space:
         """
@@ -47,14 +121,18 @@ class Worker(mesa.Agent):
         h:      internal state
         c:      communication output
         """
-        move_x = Discrete(n=3, start=-1)
-        move_y = Discrete(n=3, start=-1)
+        right = Discrete(2, dtype=np.int8)
+        left = Discrete(2, dtype=np.int8)
+        up = Discrete(2, dtype=np.int8)
+        down = Discrete(2, dtype=np.int8)
         h = Box(0, 1, shape=(self.n_hidden_vec,), dtype=np.float32)
         c = Box(0, 1, shape=(self.n_comm_vec,), dtype=np.float32)
 
         return Tuple(
-            move_x,
-            move_y,
+            right,
+            left,
+            up,
+            down,
             # h,
             c
         )
@@ -79,17 +157,12 @@ class Worker(mesa.Agent):
         assert not self.model.grid.out_of_bounds(pos_updated), "action masking failed, agent out-of-bounds"
 
         self.model.grid.move_agent(self, pos_updated)
-
-    def observe(self) -> dict:
-        """
-        return observed environment of the agent
-        """
-        obs = list()
-        action_mask = list()
         
-        
-        observation = {"observations": obs, "action_mask": action_mask}
-        return observation
+        # update position history
+        self.pos_history.append(pos_updated)
+        if len(self.pos_history) > self.n_trace_length:
+            self.pos_history.pop(0)
+        assert len(self.pos_history) <= self.n_trace_length, "position history should not be longer than maximum allowed trace length"
     
 
 class Plattform(mesa.Agent):

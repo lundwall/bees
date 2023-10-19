@@ -12,6 +12,7 @@ default_config = {
     "n_comm_vec": 2,
     "n_visibility_range": 4,
     "n_comm_range": 4,
+    "n_trace_length": 4,
 
     "max_rounds": 50,
     "apply_actions_synchronously": True,

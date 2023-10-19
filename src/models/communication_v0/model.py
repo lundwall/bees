@@ -44,15 +44,21 @@ class CommunicationV0_model(mesa.Model):
                                 n_hidden_state=self.config["n_hidden_vec"],
                                 n_comm_state=self.config["n_comm_vec"],
                                 n_visibility_range=self.config["n_visibility_range"],
-                                n_comm_range=self.config["n_comm_range"])
+                                n_comm_range=self.config["n_comm_range"],
+                                n_trace_length=self.config["n_trace_length"])
             self.schedule.add(new_worker)
             self.grid.move_to_empty(new_worker)
             
             self.possible_agents.append(new_worker.name)
             self.agent_name_to_id[new_worker.name] = new_worker.unique_id
 
+    def get_oracle_and_plattform(self) -> [Oracle, Plattform]:
+        """
+        returns oracle and plattform agents
+        """
+        return self.oracle, self.plattform
 
-    def get_possible_agents(self):
+    def get_possible_agents(self) -> [list, dict]:
         """
         returns list of scheduled agent names and dict to map names to respective ids
         """
