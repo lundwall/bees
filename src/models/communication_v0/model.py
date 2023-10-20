@@ -62,9 +62,21 @@ class CommunicationV0_model(mesa.Model):
         self.current_id += 1
         return curr_id
     
-    def increase_round(self, n: int = 1) -> int:
-        """increases the round counter by n, default 1"""
+    def finish_round(self) -> int:
+        """
+        finish up a round
+        - increases the round counter by 1
+        - activate oracle
+        """
+        # update round
         self.n_rounds += 1
+
+        # activate oracle
+        if self.config["oracle_burn_in"] < self.n_rounds:
+            r = self.random.random()
+            if r > self.config["p_oracle_activation"]:
+                self.oracle.set_state(1)
+
         return self.n_rounds
 
     def get_num_rounds_and_steps(self) -> [int, int]:
@@ -100,11 +112,9 @@ class CommunicationV0_model(mesa.Model):
         """step once through all agents, used for inference"""
         self.schedule.step()
 
-        next_round = self.increase_round()
+        next_round = self.finish_round()
         if next_round >= self.config["inference_max_rounds"]:
             self.running = False
-
-    
 
     def observe_agent(self, agent_id) -> dict:
         """returns the observation of the agent in the current model state"""

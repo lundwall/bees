@@ -86,7 +86,7 @@ class Worker(mesa.Agent):
                 bin_oracle_directives[0] = n.get_state()
             elif type(n) is Plattform:
                 bin_plattform[relative_moore_to_linear(rel_pos, radius=self.n_visibility_range)] = 1
-                bin_plattform_occupation[0] = n.is_occupied()
+                bin_plattform_occupation[0] = len(n.get_occupants()) > 0
 
         obs = (
             bin_trace,
@@ -180,8 +180,10 @@ class Plattform(mesa.Agent):
         super().__init__(unique_id, model)
         self.name = f"plattform_{unique_id}"
 
-    def is_occupied(self) -> List[mesa.Agent]:
-        return len(self.model.grid.get_neighbors(self.pos, moore=True, include_center=True, radius=0)) > 0
+    def get_occupants(self) -> bool:
+        nbs = self.model.grid.get_neighbors(self.pos, moore=True, include_center=True, radius=0)
+        nbs = [nb for nb in nbs if type(nb) is not Plattform]
+        return nbs
 
 
 class Oracle(mesa.Agent):

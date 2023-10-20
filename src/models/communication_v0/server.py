@@ -13,10 +13,18 @@ def agent_visualisation(agent):
         return {"Shape": "circle", "r": 0.5, "Color": "black", "Filled": "true", "Layer": 1}
     
     if type(agent) is Plattform:
-        return {"Shape": "circle", "r": 1, "Color": "blue", "Filled": "true", "Layer": 0}
+        oracle, _ = agent.model.get_oracle_and_plattform()
+        if oracle.get_state() == 1 and len(agent.get_occupants()) > 0 or \
+            oracle.get_state() == 0 and len(agent.get_occupants()) <= 0:
+            return {"Shape": "circle", "r": 1, "Color": "green", "Filled": "true", "Layer": 0}
+        else:
+            return {"Shape": "circle", "r": 1, "Color": "red", "Filled": "true", "Layer": 0}
     
     if type(agent) is Oracle:
-        return {"Shape": "circle", "r": 1, "Color": "green", "Filled": "true", "Layer": 0}
+        if agent.get_state() == 0:
+            return {"Shape": "rect", "w": 1, "h": 1, "Color": "red", "Filled": "true", "Layer": 0}
+        if agent.get_state() == 1:
+            return {"Shape": "rect",  "w": 1, "h": 1, "Color": "green", "Filled": "true", "Layer": 0}
     
 def create_server(config):
     canvas = CanvasGrid(

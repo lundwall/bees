@@ -160,7 +160,7 @@ class CommunicationV0_env(AECEnv):
             self.progress_simulation()
 
         if is_last:
-            next_round = self.model.increase_round()
+            next_round = self.model.finish_round()
             self.compute_and_assign_reward()
             
             # kill the game after max_rounds
@@ -217,7 +217,7 @@ class CommunicationV0_env(AECEnv):
         oracle, plattform = self.model.get_oracle_and_plattform()
         
         occupation_order = oracle.get_state()
-        is_occupied = plattform.is_occupied()
+        is_occupied = plattform.get_occupants() > 0
 
         reward = 0
         if not occupation_order and is_occupied:
