@@ -50,7 +50,6 @@ class CommunicationV0_env(AECEnv):
         self.action_buffer = dict() # {agent_id: action}
 
         self.render_mode = render_mode
-        # self.visualizer = TextGrid(self.model.grid, self.agent_to_ascii)
 
 
     # @todo: rework
@@ -129,10 +128,6 @@ class CommunicationV0_env(AECEnv):
         self.terminations = {agent: False for agent in self.agents}
         self.truncations = {agent: False for agent in self.agents}
         self.infos = {agent: {} for agent in self.agents}
-        
-        # track 'time'
-        self.n_steps = 0
-        self.n_rounds = 0
 
         # allows easy cyclic stepping through the agents list
         self._agent_selector = agent_selector(self.agents)
@@ -165,10 +160,11 @@ class CommunicationV0_env(AECEnv):
             self.progress_simulation()
 
         if is_last:
+            next_round = self.model.increase_round()
             self.compute_and_assign_reward()
             
             # kill the game after max_rounds
-            if self.n_rounds >= self.config["max_rounds"]:
+            if next_round > self.config["training_max_rounds"]:
                 for a in self.agents:
                     self.truncations[a] = True
         else:
@@ -184,9 +180,6 @@ class CommunicationV0_env(AECEnv):
         if self.render_mode:
             self.render()
 
-        self.n_steps += 1
-        self.n_rounds += 1 if is_last else 0
-
 
     def progress_simulation(self) -> None:
         """
@@ -196,12 +189,12 @@ class CommunicationV0_env(AECEnv):
         # step
         for agent in self.action_buffer.keys():
             agent_id = self.agent_to_id[agent]
-            self.model.step(agent_id=agent_id, action=self.action_buffer[agent])
+            self.model.step_agent(agent_id=agent_id, action=self.action_buffer[agent])
         
         # update observations
         for agent in self.action_buffer.keys():
             agent_id = self.agent_to_id[agent]
-            self.observations[agent] = self.model.observe(agent_id=agent_id)
+            self.observations[agent] = self.model.observe_agent(agent_id=agent_id)
 
         self.action_buffer.clear()
 

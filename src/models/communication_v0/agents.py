@@ -98,27 +98,23 @@ class Worker(mesa.Agent):
         )
 
         # calculate action mask based on grid
-        right_mask = np.zeros(shape=(1,), dtype=np.int8)
-        left_mask = np.zeros(shape=(1,), dtype=np.int8)
-        up_mask = np.zeros(shape=(1,), dtype=np.int8)
-        down_mask = np.zeros(shape=(1,), dtype=np.int8)
-        c_mask = np.zeros(shape=(self.n_comm_vec,), dtype=np.int8)
+        move_x_mask = np.ones(shape=(3,), dtype=np.int8)
+        move_y_mask = np.ones(shape=(3,), dtype=np.int8)
+        c_mask = np.ones(shape=(self.n_comm_vec,), dtype=np.int8)
 
         x_curr, y_curr = self.pos
         if self.model.grid.out_of_bounds((x_curr + 1, y_curr)):
-            right_mask[0] = 1
+            move_x_mask[2] = 0
         if self.model.grid.out_of_bounds((x_curr - 1, y_curr)):
-            left_mask[0] = 1
+            move_x_mask[0] = 0
         if self.model.grid.out_of_bounds((x_curr, y_curr + 1)):
-            up_mask[0] = 1
+            move_y_mask[2] = 0
         if self.model.grid.out_of_bounds((x_curr, y_curr - 1)):
-            down_mask[0] = 1 
+            move_y_mask[0] = 0
 
         action_mask = (
-            right_mask,
-            left_mask,
-            up_mask,
-            down_mask,
+            move_x_mask,
+            move_y_mask,
             None
         )           
 
@@ -131,18 +127,14 @@ class Worker(mesa.Agent):
         h:      internal state
         c:      communication output
         """
-        right = Discrete(1)
-        left = Discrete(1)
-        up = Discrete(1)
-        down = Discrete(1)
+        move_x = Discrete(3, start=-1)
+        move_y = Discrete(3, start=-1)
         h = Box(0, 1, shape=(self.n_hidden_vec,), dtype=np.float32)
         c = Box(0, 1, shape=(self.n_comm_vec,), dtype=np.float32)
 
         return Tuple(
-            [right,
-            left,
-            up,
-            down,
+            [move_x,
+            move_y,
             # h,
             c]
         )
@@ -154,15 +146,20 @@ class Worker(mesa.Agent):
         # get action in inference mode
         if not action:
             obs = self.observe()
-            action = self.model.policy_net.compute_single_action(obs)
+            # sample from given policy
+            if self.model.has_policy():
+                action = self.model.policy_net.compute_single_action(obs)
+            # random sampling
+            else:
+                action = self.get_action_space().sample(obs["action_mask"])
 
         # decode action
-        right, left, up, down, c = action
+        move_x, move_y, c = action
 
         # move agent
         x_curr, y_curr = self.pos
-        x_updated = x_curr + right - left
-        y_updated = y_curr + up - down
+        x_updated = x_curr + move_x
+        y_updated = y_curr + move_y
         pos_updated = (x_updated, y_updated)
         assert not self.model.grid.out_of_bounds(pos_updated), "action masking failed, agent out-of-bounds"
 
