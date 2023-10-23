@@ -15,6 +15,12 @@ class CommunicationV0_model(mesa.Model):
         self.config = config
         self.policy_net = policy_net # not None in inference mode
 
+        # key coordinates
+        x_max = self.config["mesa_grid_width"] - 1
+        y_max = self.config["mesa_grid_height"] - 1
+        y_mid = floor(y_max / 2)
+        x_mid = floor(x_max / 2)
+
         # create model
         # grid coordinates:
         #   bottom left = (0,0)
@@ -36,16 +42,12 @@ class CommunicationV0_model(mesa.Model):
                                 n_comm_range=self.config["n_comm_range"],
                                 n_trace_length=self.config["n_trace_length"])
             self.schedule.add(new_worker)
-            self.grid.place_agent(agent=new_worker, pos=(0,0))
+            self.grid.place_agent(agent=new_worker, pos=(x_mid,0))
             
             self.possible_agents.append(new_worker.name)
             self.agent_name_to_id[new_worker.name] = new_worker.unique_id
 
         # create oracle and lightswitch
-        x_max = self.config["mesa_grid_width"] - 1
-        y_max = self.config["mesa_grid_height"] - 1
-        y_mid = floor(y_max / 2)
-        
         margin = 2
         x_oracle = margin
         x_plattform = x_max - margin

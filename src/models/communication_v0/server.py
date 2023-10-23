@@ -22,7 +22,7 @@ def agent_visualisation(agent):
     
     if type(agent) is Oracle:
         if agent.get_state() == 0:
-            return {"Shape": "rect", "w": 1, "h": 1, "Color": "red", "Filled": "true", "Layer": 0}
+            return {"Shape": "rect", "w": 1, "h": 1,  "Color": "blue", "Filled": "true", "Layer": 0}
         if agent.get_state() == 1:
             return {"Shape": "rect",  "w": 1, "h": 1, "Color": "green", "Filled": "true", "Layer": 0}
     
