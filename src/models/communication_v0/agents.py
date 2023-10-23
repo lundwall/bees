@@ -189,15 +189,22 @@ class Plattform(mesa.Agent):
 class Oracle(mesa.Agent):
     """
     oracle that displays which plattform to step on
-    0 is default and means none
     """
-    def __init__(self, unique_id: int, model: mesa.Model, state: int = 0):
+    def __init__(self, unique_id: int, model: mesa.Model, 
+                 is_active: bool = False, 
+                 state: int = 0):
         super().__init__(unique_id, model)
         self.name = f"oracle_{unique_id}"
+        self.active = is_active
         self.state = state
+        
+    def is_active(self):
+        return self.active
 
     def get_state(self):
         return self.state
     
     def set_state(self, state: int):
+        """set state of oracle, activate if it is the first state switch"""
+        self.active = True
         self.state = state

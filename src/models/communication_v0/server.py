@@ -21,9 +21,11 @@ def agent_visualisation(agent):
             return {"Shape": "circle", "r": 1, "Color": "red", "Filled": "true", "Layer": 0}
     
     if type(agent) is Oracle:
-        if agent.get_state() == 0:
-            return {"Shape": "rect", "w": 1, "h": 1,  "Color": "blue", "Filled": "true", "Layer": 0}
-        if agent.get_state() == 1:
+        if not agent.is_active():
+            return {"Shape": "rect", "w": 1, "h": 1,  "Color": "orange", "Filled": "true", "Layer": 0}
+        elif agent.get_state() == 0:
+            return {"Shape": "rect", "w": 1, "h": 1,  "Color": "red", "Filled": "true", "Layer": 0}
+        elif agent.get_state() == 1:
             return {"Shape": "rect",  "w": 1, "h": 1, "Color": "green", "Filled": "true", "Layer": 0}
     
 def create_server(config):
