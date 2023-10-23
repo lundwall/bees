@@ -33,6 +33,7 @@ class CommunicationV0_model(mesa.Model):
         # track number of rounds, steps tracked by scheduler
         self.n_rounds = 0
         self.total_reward = 0
+        self.last_reward = 0
 
         # create workers
         for _ in range(self.config["num_agents"]):
@@ -69,6 +70,11 @@ class CommunicationV0_model(mesa.Model):
         self.current_id += 1
         return curr_id
     
+    def print_status(self) -> None:
+        """print status of the model"""
+        print(f"round {self.n_rounds}: oracle is {'off' if not self.oracle.is_active() else 'on'}\n\ttime to reward={self.time_to_reward}\n\treward={self.last_reward}, acc_reward={self.total_reward}")
+
+    
     def finish_round(self) -> int:
         """
         finish up a round
@@ -80,8 +86,8 @@ class CommunicationV0_model(mesa.Model):
         self.n_rounds += 1
         self.time_to_reward = max(0, self.time_to_reward - 1)
 
-        curr_reward = self.compute_reward()
-        self.total_reward += curr_reward
+        self.last_reward = self.compute_reward()
+        self.total_reward += self.last_reward
 
         # activate oracle
         if not self.oracle.is_active() and self.config["oracle_burn_in"] < self.n_rounds:
@@ -92,9 +98,7 @@ class CommunicationV0_model(mesa.Model):
                 self.time_to_reward = self.reward_delay
 
         # @todo: change state of oracle
-
-        print(f"round {self.n_rounds}: oracle is {'off' if not self.oracle.is_active() else 'on'}\n\ttime to reward={self.time_to_reward}\n\treward={curr_reward}, acc_reward={self.total_reward}")
-
+        
         return self.n_rounds
     
     def compute_reward(self) -> int:
@@ -155,6 +159,7 @@ class CommunicationV0_model(mesa.Model):
         self.schedule.step()
 
         next_round = self.finish_round()
+        self.print_status()
         if next_round >= self.config["inference_max_rounds"]:
             self.running = False
 
