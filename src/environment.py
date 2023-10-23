@@ -52,18 +52,6 @@ class CommunicationV0_env(AECEnv):
         self.render_mode = render_mode
 
 
-    # @todo: rework
-    def agent_to_ascii(self, agent):
-        """
-        translates agent to ascii sign for printing
-        """
-        if type(agent) is Worker:
-            return '∆'
-        elif type(agent) is Oracle:
-            return f'={agent.get_state()}='
-        elif type(agent) is Plattform:
-            return '|∆|' if agent.is_occupied() else "| |"
-
     @functools.lru_cache(maxsize=None)
     def observation_space(self, agent):
         """
@@ -87,7 +75,7 @@ class CommunicationV0_env(AECEnv):
         return observation of the given agent (can be outdated)
         """
         if not self.observations[agent]:
-            self.observations[agent] = self.model.observe(self.agent_to_id[agent])
+            self.observations[agent] = self.model.observe_agent(self.agent_to_id[agent])
         return self.observations[agent]
 
 
@@ -102,8 +90,7 @@ class CommunicationV0_env(AECEnv):
             )
             return
         elif self.render_mode == "minimal":
-            print(f"round={self.n_rounds}, step={self.n_steps}")
-            #print(self.visualizer.render())
+            self.model.print_status()
 
 
     def reset(self, seed=None, options=None):
@@ -161,12 +148,16 @@ class CommunicationV0_env(AECEnv):
 
         if is_last:
             next_round = self.model.finish_round()
-            self.compute_and_assign_reward()
+            reward = self.model.compute_reward()
+            self.rewards = {agent: reward for agent in self.agents}
             
             # kill the game after max_rounds
-            if next_round > self.config["training_max_rounds"]:
+            if next_round >= self.config["training_max_rounds"]:
                 for a in self.agents:
                     self.truncations[a] = True
+            # render
+            if self.render_mode:
+                self.render()
         else:
             self._clear_rewards()
 
@@ -177,8 +168,6 @@ class CommunicationV0_env(AECEnv):
         self._accumulate_rewards()
         self._deads_step_first()
 
-        if self.render_mode:
-            self.render()
 
 
     def progress_simulation(self) -> None:
@@ -197,34 +186,3 @@ class CommunicationV0_env(AECEnv):
             self.observations[agent] = self.model.observe_agent(agent_id=agent_id)
 
         self.action_buffer.clear()
-
-    def compute_and_assign_reward(self) -> None:
-        """
-        calculate reward and assign it to all agents at end of episode
-
-        oracle= 0
-        plattform = 1
-        reward = -1
-
-        oracle = 1
-        plattform = 1
-        reward = 1
-
-        oracle = 1
-        plattform = 0
-        reward = -1
-        """
-        oracle, plattform = self.model.get_oracle_and_plattform()
-        
-        occupation_order = oracle.get_state()
-        is_occupied = plattform.get_occupants() > 0
-
-        reward = 0
-        if not occupation_order and is_occupied:
-            reward = -1
-        elif occupation_order and not is_occupied:
-            reward = -1
-        elif occupation_order and is_occupied:
-            reward = 10
-
-        self.rewards = {agent: reward for agent in self.agents}
