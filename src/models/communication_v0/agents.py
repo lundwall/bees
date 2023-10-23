@@ -197,14 +197,19 @@ class Oracle(mesa.Agent):
         self.name = f"oracle_{unique_id}"
         self.active = is_active
         self.state = state
-        
+
+    def activate(self):
+        self.active = True
+
+    def deactivate(self):
+        self.active = False
+
     def is_active(self):
         return self.active
-
+    
     def get_state(self):
         return self.state
     
     def set_state(self, state: int):
-        """set state of oracle, activate if it is the first state switch"""
-        self.active = True
+        """set state of oracle"""
         self.state = state
