@@ -6,6 +6,7 @@ default_config = {
     "mesa_tile_size": 30,
 
     # scenario
+    
     "num_agents": 10,
     "oracle_burn_in": 15,
     "p_oracle_activation": 0.01,

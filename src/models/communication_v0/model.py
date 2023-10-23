@@ -80,7 +80,8 @@ class CommunicationV0_model(mesa.Model):
         self.n_rounds += 1
         self.time_to_reward = max(0, self.time_to_reward - 1)
 
-        self.total_reward += self.compute_reward()
+        curr_reward = self.compute_reward()
+        self.total_reward += curr_reward
 
         # activate oracle
         if not self.oracle.is_active() and self.config["oracle_burn_in"] < self.n_rounds:
@@ -92,12 +93,14 @@ class CommunicationV0_model(mesa.Model):
 
         # @todo: change state of oracle
 
+        print(f"round {self.n_rounds}: oracle is {'off' if not self.oracle.is_active() else 'on'}\n\ttime to reward={self.time_to_reward}\n\treward={curr_reward}, acc_reward={self.total_reward}")
+
         return self.n_rounds
     
     def compute_reward(self) -> int:
         """computes the reward based on the current state"""
         oracle_state = self.oracle.get_state()
-        plattform_occupation = self.plattform.get_occupants() > 0
+        plattform_occupation = len(self.plattform.get_occupants()) > 0
         
         # dont go on plattform if oracle is not active
         if not self.oracle.is_active():
