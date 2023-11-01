@@ -3,10 +3,18 @@ import functools
 import gymnasium
 from pettingzoo import AECEnv
 from pettingzoo.utils import agent_selector, wrappers
+from ray.train import report
 
-from models.communication_v0.model import CommunicationV0_model
-from models.communication_v0.agents import Worker, Oracle, Plattform
-
+from envs.communication_v0.model import CommunicationV0_model
+from pettingzoo.utils.wrappers.base import BaseWrapper
+from pettingzoo.utils.env import (
+    ActionType,
+    AECEnv,
+    AECIterable,
+    AECIterator,
+    AgentID,
+    ObsType,
+)
 
 def env(render_mode=None, task="communication_v0", config={}):
     """
@@ -23,7 +31,6 @@ def env(render_mode=None, task="communication_v0", config={}):
     env = wrappers.OrderEnforcingWrapper(env)
 
     return env
-
 
 class CommunicationV0_env(AECEnv):
     """
@@ -51,28 +58,34 @@ class CommunicationV0_env(AECEnv):
 
         self.render_mode = render_mode
 
+        self.n_episode = 0
+
 
     @functools.lru_cache(maxsize=None)
-    def observation_space(self, agent):
+    def observation_space(self, agent) -> gymnasium.spaces.Space:
         """
         return action space for the given agent
+        the obsercation space has the form of a dict{observation, action_mask}
         """ 
         agent_id = self.agent_to_id[agent]
         return self.model.get_obs_space(agent_id=agent_id)
         
     
     @functools.lru_cache(maxsize=None)
-    def action_space(self, agent):
+    def action_space(self, agent) -> gymnasium.spaces.Space:
         """
         return action space for the given agent
+        the size of the action space can be different than the one in observation[action_mask], 
+            but it needs to be clear what is being masked in the custom model
         """
         agent_id = self.agent_to_id[agent]
         return self.model.get_action_space(agent_id=agent_id)
 
 
-    def observe(self, agent):
+    def observe(self, agent) -> dict:
         """
         return observation of the given agent (can be outdated)
+        an observation has the form of a dict{observation, action_mask}
         """
         if not self.observations[agent]:
             self.observations[agent] = self.model.observe_agent(self.agent_to_id[agent])
@@ -107,6 +120,7 @@ class CommunicationV0_env(AECEnv):
         - agent_selection
         and must set up the environment so that render(), step(), and observe() can be called without issues.
         """
+        self.n_episode = self.n_episode + 1
         self.model = CommunicationV0_model(config=self.config)
         self.agents = self.possible_agents[:]
         self.observations = {agent: None for agent in self.agents}
@@ -140,6 +154,7 @@ class CommunicationV0_env(AECEnv):
         # get agent
         agent = self.agent_selection
         is_last = self._agent_selector.is_last()
+        # self._cumulative_rewards[self.agent_selection] = 0 @todo: when to do this?
 
         # add action to buffer and progress the simulation if necessary
         self.action_buffer[agent] = action
@@ -147,27 +162,21 @@ class CommunicationV0_env(AECEnv):
             self.progress_simulation()
 
         if is_last:
-            next_round = self.model.finish_round()
-            reward = self.model.compute_reward()
+            next_round, reward = self.model.finish_round()
             self.rewards = {agent: reward for agent in self.agents}
+            self._accumulate_rewards()
             
             # kill the game after max_rounds
-            if next_round >= self.config["training_max_rounds"]:
+            if next_round >= self.config["mesa_max_rounds"]:
                 for a in self.agents:
                     self.truncations[a] = True
             # render
             if self.render_mode:
                 self.render()
-        else:
-            self._clear_rewards()
 
         # selects the next agent.
         self.agent_selection = self._agent_selector.next()
-
-        # Adds .rewards to ._cumulative_rewards
-        self._accumulate_rewards()
         self._deads_step_first()
-
 
 
     def progress_simulation(self) -> None:
