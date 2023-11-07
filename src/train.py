@@ -71,7 +71,8 @@ def run(auto_init: bool,
             )
         .rollouts(
             num_rollout_workers=resources_config["num_cpus"] - resources_config["num_cpus_for_local_worker"], 
-            num_envs_per_worker=resources_config["num_envs_per_worker"]
+            num_envs_per_worker=resources_config["num_envs_per_worker"],
+            recreate_failed_workers=True,
         )
         .training(
             gamma=tune.uniform(0.1, 0.9),
