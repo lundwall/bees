@@ -17,14 +17,18 @@ from envs.communication_v0.curriculum import curriculum_fn
 from configs.utils import load_config_dict
 
 
-def run(logging_config: dict, 
+def run(auto_init: bool,
+        logging_config: dict, 
         resources_config: dict, 
         model_config: dict,
         env_config: dict,
         tune_config: dict):
     """starts a run with the given configurations"""
 
-    ray.init(num_cpus=resources_config["num_cpus"], num_gpus=resources_config["num_gpus"])
+    if auto_init:
+        ray.init()
+    else:
+        ray.init(num_cpus=resources_config["num_cpus"], num_gpus=resources_config["num_gpus"])
     
     run_name = env_config["task_name"] + "_" + datetime.now().strftime("%Y-%m-%d-%H-%M")
     storage_path = os.path.join(logging_config["storage_path"], run_name)
@@ -168,7 +172,8 @@ if __name__ == '__main__':
         logging_config = load_config_dict(os.path.join(config_dir, args.logging_config))
 
 
-    run(logging_config=logging_config,
+    run(auto_init=args.location=="cluster",
+        logging_config=logging_config,
         resources_config=resources_config,
         model_config=model_config,
         env_config=env_config,
