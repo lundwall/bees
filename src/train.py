@@ -17,14 +17,15 @@ from envs.communication_v0.curriculum import curriculum_fn
 from configs.utils import load_config_dict
 
 
-def run(logging_config: dict, 
+def run(auto_init: bool,
+        logging_config: dict, 
         resources_config: dict, 
         model_config: dict,
         env_config: dict,
         tune_config: dict):
     """starts a run with the given configurations"""
 
-    ray.init(num_cpus=resources_config["num_cpus"], num_gpus=resources_config["num_gpus"])
+    ray.init()
     
     run_name = env_config["task_name"] + "_" + datetime.now().strftime("%Y-%m-%d-%H-%M")
     storage_path = os.path.join(logging_config["storage_path"], run_name)
@@ -60,15 +61,9 @@ def run(logging_config: dict,
             env_config=env_config["env_config"],
             env_task_fn=curriculum_fn if env_config["env_config"]["curriculum_learning"] else NotProvided,
             disable_env_checking=True)
-        .resources(
-            num_gpus=resources_config["num_gpus"],
-            num_cpus_per_worker=1,
-            num_cpus_for_local_worker=resources_config["num_cpus_for_local_worker"]
-            )
-        .rollouts(
-            num_rollout_workers=resources_config["num_cpus"] - resources_config["num_cpus_for_local_worker"], 
-            num_envs_per_worker=resources_config["num_envs_per_worker"]
-        )
+        #.resources(
+        #    num_gpus=resources_config["num_gpus"],
+        #    )
         .training(
             gamma=tune.uniform(0.1, 0.9),
             lr=tune.uniform(1e-4, 1e-1),
@@ -108,7 +103,7 @@ def run(logging_config: dict,
 
     asha_scheduler = ASHAScheduler(
         time_attr='timesteps_total',
-        metric='custom_metrics/curr_learning_score',
+        metric='custom_metrics/curr_learning_score_mean',
         mode='max',
         max_t=tune_config["max_timesteps"],
         grace_period=tune_config["min_timesteps"],
@@ -168,7 +163,8 @@ if __name__ == '__main__':
         logging_config = load_config_dict(os.path.join(config_dir, args.logging_config))
 
 
-    run(logging_config=logging_config,
+    run(auto_init=args.location=="cluster",
+        logging_config=logging_config,
         resources_config=resources_config,
         model_config=model_config,
         env_config=env_config,
