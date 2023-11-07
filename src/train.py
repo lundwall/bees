@@ -1,68 +1,123 @@
 import argparse
+import os
 import ray
 from ray import air, tune
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.air.integrations.wandb import WandbLoggerCallback
+from ray.rllib.utils.from_config import NotProvided
+from ray.train import CheckpointConfig
+from ray.tune.schedulers import ASHAScheduler
+from datetime import datetime
+
 
 from envs.communication_v0.environment import CommunicationV0_env 
-from experiments import default_config
 from models.fully_connected import FullyConnected
 from envs.communication_v0.callbacks import ReportModelStateCallback
+from envs.communication_v0.curriculum import curriculum_fn
+from configs.utils import load_config_dict
 
 
-def run(task_name: str, wandb_key: str, log_folder: str):
-    ray.init(num_cpus=4)
+def run(logging_config: dict, 
+        resources_config: dict, 
+        model_config: dict,
+        env_config: dict,
+        tune_config: dict):
+    """starts a run with the given configurations"""
 
+    ray.init(num_cpus=resources_config["num_cpus"], num_gpus=resources_config["num_gpus"])
+    
+    run_name = env_config["task_name"] + "_" + datetime.now().strftime("%Y-%m-%d-%H-%M")
+    storage_path = os.path.join(logging_config["storage_path"], run_name)
+
+    # calculate some configuration data into ray language
+    # only used when train_batch_size is not a hyperparameter
+    epochs_per_training_batch = tune_config["epochs_per_training_batch"]
+    checkpoint_every_n_timesteps = tune_config["checkpoint_every_n_timesteps"]
+    train_batch_size = epochs_per_training_batch * env_config["env_config"]["max_steps"], # ts per iteration
+    train_batch_size = train_batch_size[0]
+    checkpoint_frequency = int(checkpoint_every_n_timesteps/train_batch_size) # need to convert to iterations
+    
+    # make checkpoint frequency such that the biggest batch size still gets it, the smaller one produce more
+    max_training_batch_size = 4096
+    min_checkpoint_frequency = int(checkpoint_every_n_timesteps/max_training_batch_size)
+
+    # set task environment
+    env = None
+    if env_config["task_name"] == "communication_v0":
+        env = CommunicationV0_env
+    
+    # create internal model from config
+    model = {}
+    if model_config["model"] == "FullyConnected":
+        model = {"custom_model": FullyConnected,
+                "custom_model_config": model_config["model_config"]}
+
+    # set config
     ppo_config = (
         PPOConfig()
         .environment(
-            CommunicationV0_env, # @todo: need to build wrapper
-            env_config=default_config,
-            disable_env_checking=True
-            # env_task_fn= @todo: curriculum learning
+            env, # @todo: need to build wrapper
+            env_config=env_config["env_config"],
+            env_task_fn=curriculum_fn if env_config["env_config"]["curriculum_learning"] else NotProvided,
+            disable_env_checking=True)
+        .resources(
+            num_gpus=resources_config["num_gpus"],
+            num_cpus_per_worker=1,
+            num_cpus_for_local_worker=resources_config["num_cpus_for_local_worker"]
+            )
+        .rollouts(
+            num_rollout_workers=resources_config["num_cpus"] - resources_config["num_cpus_for_local_worker"], 
+            num_envs_per_worker=resources_config["num_envs_per_worker"]
         )
-        .resources(num_gpus=0)
-        .rollouts(num_rollout_workers=1, 
-                num_envs_per_worker=1,
-                create_env_on_local_worker=True)
         .training(
-            train_batch_size=tune.choice([128, 256, 512, 1024, 2048, 4096]),
-            gamma=tune.uniform(0.1, 1),
-            lr=tune.loguniform(1e-4, 1e-1),
-            grad_clip=tune.loguniform(0.1, 50),
-            model={
-                "custom_model": FullyConnected,
-                "custom_model_config": default_config["model_config"]},
+            gamma=tune.uniform(0.1, 0.9),
+            lr=tune.uniform(1e-4, 1e-1),
+            grad_clip=1,
+            grad_clip_by="value",
+            model=model,
+            train_batch_size=tune.choice([2048, 4096, 8192]), # ts per iteration
             _enable_learner_api=False
         )
         .rl_module(_enable_rl_module_api=False)
         .callbacks(ReportModelStateCallback)
+        .multi_agent(count_steps_by="env_steps")
     )
 
-
+    # logging callback
     callbacks = list()
-    wandb_callback = WandbLoggerCallback(
-        project=default_config["wandb_project"],
-        group=f"tune_{task_name}",
-        log_config=True,
-        upload_checkpoints=True,
-        api_key_file=wandb_key
+    if logging_config["enable_wandb"]:
+        callbacks.append(WandbLoggerCallback(
+                            project=logging_config["project"],
+                            group=run_name,
+                            api_key_file=logging_config["api_key_file"],
+                            log_config=logging_config["log_config"],
+    ))
+        
+    checkpoint_config = CheckpointConfig(
+        checkpoint_frequency=min_checkpoint_frequency,
+        checkpoint_at_end=True
     )
-    if default_config["enable_wandb"]:
-        callbacks.append(wandb_callback)
 
     run_config = air.RunConfig(
-        name=task_name,
-        # stopping criteria can be everything from here: https://docs.ray.io/en/latest/tune/tutorials/tune-metrics.html#tune-autofilled-metrics
-        stop={
-            "timesteps_total": default_config["tune_stop_max_samples"]},
-        storage_path=log_folder,
-        callbacks=callbacks
+        name=run_name,
+        stop={"timesteps_total": tune_config["max_timesteps"]}, # https://docs.ray.io/en/latest/tune/tutorials/tune-metrics.html#tune-autofilled-metrics
+        storage_path=storage_path,
+        callbacks=callbacks,
+        checkpoint_config=checkpoint_config,
+    )
+
+    asha_scheduler = ASHAScheduler(
+        time_attr='timesteps_total',
+        metric='custom_metrics/curr_learning_score',
+        mode='max',
+        max_t=tune_config["max_timesteps"],
+        grace_period=tune_config["min_timesteps"],
+        reduction_factor=2,
     )
 
     tune_config = tune.TuneConfig(
-            num_samples=default_config["tune_num_samples"],
-            # @todo: find good parameters
+            num_samples=tune_config["num_samples"],
+            scheduler=asha_scheduler
         )
 
     tuner = tune.Tuner(
@@ -78,20 +133,46 @@ def run(task_name: str, wandb_key: str, log_folder: str):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='script to setup hyperparameter tuning')
-    parser.add_argument('-location', choices=['cluster', 'local'], help='execution location, setting depending variables')
-    parser.add_argument('-wandb_key', default=".wandb_key", help="path to the wandb key-file")
+    parser.add_argument('-location', default="local", choices=['cluster', 'local'], help='execution location, setting depending variables')
+    parser.add_argument('-logging_config', default=None, help="path to the logging config json, defaults to *_local or cluster, depending on location")
+    parser.add_argument('-resources_config', default=None, help="path to the available resources config json, defaults to *_local or cluster, depending on location")
+    parser.add_argument('-model_config', default="model_fc.json", help="path to the NN model config")
+    parser.add_argument('-env_config', default="env_comv0.json", help="path to task/ env config")
+    parser.add_argument('-tune_config', default="tune_ppo.json", help="path to tune config")
+
     args = parser.parse_args()
+    print("===== run hyperparameter tuning =======")
+    for k, v in args.__dict__.items():
+        print(f"\t{k}: {v}")
+    print("\n")
 
-    task_name = "communication_v0"
-    wandb_key = args.wandb_key
-    if args.mode == 'cluster':
-        log_folder = "/itet-stor/kpius/net_scratch/si_bees/log"
-    elif args.mode == 'local':
-        log_folder = "/Users/sega/Code/si_bees/log"
+    # load configs
+    config_dir = os.path.join("src", "configs")
+    model_config = load_config_dict(os.path.join(config_dir, args.model_config))
+    env_config = load_config_dict(os.path.join(config_dir, args.env_config))
+    tune_config = load_config_dict(os.path.join(config_dir, args.tune_config))
+    
+    # location dependend configs
+    if args.location == 'cluster':
+        resources_config = load_config_dict(os.path.join(config_dir, "resources_cluster.json"))
+        logging_config = load_config_dict(os.path.join(config_dir, "logging_cluster.json"))
 
-    run(task_name=task_name, 
-        wandb_key=wandb_key,
-        log_folder=log_folder)
+    elif args.location == 'local':
+        resources_config = load_config_dict(os.path.join(config_dir, "resources_local.json"))
+        logging_config = load_config_dict(os.path.join(config_dir, "logging_local.json"))
+
+    # override default configs
+    if args.resources_config:
+        resources_config = load_config_dict(os.path.join(config_dir, args.resources_config))
+    if args.logging_config:
+        logging_config = load_config_dict(os.path.join(config_dir, args.logging_config))
+
+
+    run(logging_config=logging_config,
+        resources_config=resources_config,
+        model_config=model_config,
+        env_config=env_config,
+        tune_config=tune_config)
 
 
 
