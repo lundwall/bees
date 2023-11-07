@@ -25,10 +25,7 @@ def run(auto_init: bool,
         tune_config: dict):
     """starts a run with the given configurations"""
 
-    if auto_init:
-        ray.init()
-    else:
-        ray.init(num_cpus=resources_config["num_cpus"], num_gpus=resources_config["num_gpus"])
+    ray.init()
     
     run_name = env_config["task_name"] + "_" + datetime.now().strftime("%Y-%m-%d-%H-%M")
     storage_path = os.path.join(logging_config["storage_path"], run_name)
@@ -64,9 +61,9 @@ def run(auto_init: bool,
             env_config=env_config["env_config"],
             env_task_fn=curriculum_fn if env_config["env_config"]["curriculum_learning"] else NotProvided,
             disable_env_checking=True)
-        .resources(
-            num_gpus=resources_config["num_gpus"],
-            )
+        #.resources(
+        #    num_gpus=resources_config["num_gpus"],
+        #    )
         .training(
             gamma=tune.uniform(0.1, 0.9),
             lr=tune.uniform(1e-4, 1e-1),
