@@ -103,7 +103,7 @@ def run(auto_init: bool,
 
     asha_scheduler = ASHAScheduler(
         time_attr='timesteps_total',
-        metric='custom_metrics/curr_learning_score',
+        metric='custom_metrics/curr_learning_score_mean',
         mode='max',
         max_t=tune_config["max_timesteps"],
         grace_period=tune_config["min_timesteps"],
