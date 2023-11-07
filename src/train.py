@@ -70,7 +70,7 @@ def run(auto_init: bool,
             #num_cpus_for_local_worker=resources_config["num_cpus_for_local_worker"]
             )
         .rollouts(
-            num_rollout_workers=resources_config["num_rollout_workers"], 
+            #num_rollout_workers=resources_config["num_rollout_workers"], 
             #num_envs_per_worker=resources_config["num_envs_per_worker"],
             recreate_failed_workers=True,
         )
