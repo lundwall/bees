@@ -66,14 +66,7 @@ def run(auto_init: bool,
             disable_env_checking=True)
         .resources(
             num_gpus=resources_config["num_gpus"],
-            #num_cpus_per_worker=1,
-            #num_cpus_for_local_worker=resources_config["num_cpus_for_local_worker"]
             )
-        .rollouts(
-            #num_rollout_workers=resources_config["num_rollout_workers"], 
-            #num_envs_per_worker=resources_config["num_envs_per_worker"],
-            recreate_failed_workers=True,
-        )
         .training(
             gamma=tune.uniform(0.1, 0.9),
             lr=tune.uniform(1e-4, 1e-1),
