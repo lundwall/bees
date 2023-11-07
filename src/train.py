@@ -66,8 +66,8 @@ def run(auto_init: bool,
             disable_env_checking=True)
         .resources(
             num_gpus=resources_config["num_gpus"],
-            num_cpus_per_worker=1,
-            num_cpus_for_local_worker=resources_config["num_cpus_for_local_worker"]
+            #num_cpus_per_worker=1,
+            #num_cpus_for_local_worker=resources_config["num_cpus_for_local_worker"]
             )
         .rollouts(
             num_rollout_workers=resources_config["num_cpus"] - resources_config["num_cpus_for_local_worker"], 
