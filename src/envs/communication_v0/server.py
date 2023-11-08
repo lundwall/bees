@@ -38,40 +38,33 @@ def agent_visualisation(agent):
             square["Color"] = "red"
         return square
     
-def create_server(model_checkpoint: str):
+def create_server(curr_level: int, env_config: dict, model_checkpoint: str):
     
     policy_net = None
     if model_checkpoint:
         policy_net = PPO.from_checkpoint(model_checkpoint)
 
+    # merge config dict
+    model_params = {}
+    model_params["max_steps"] = env_config["env_config"]["max_steps"]
+    model_params["policy_net"] = policy_net
+    for k, i in env_config["env_config"]["agent_config"].items():
+        model_params[k] = i
+    for k, i in env_config["env_config"]["model_configs"][str(curr_level)]["model_params"].items():
+        model_params[k] = i
+
     canvas = CanvasGrid(
         agent_visualisation, 
-        grid_width=11, 
-        grid_height=11, 
+        grid_width=model_params["n_tiles_x"], 
+        grid_height=model_params["n_tiles_y"], 
         canvas_width=500,
         canvas_height=500)
 
     server = ModularServer(
         CommunicationV0_model, 
         [canvas], 
-        "communication v0", 
-        model_params=
-            {
-                "n_agents": 5,
-                "agent_placement": "random",
-                "plattform_distance": 5,
-                "oracle_burn_in": 10,
-                "p_oracle_change": 0.05,
-                "n_tiles_x": 11,
-                "n_tiles_y": 11,
-                "max_steps": 100,
-                "size_hidden": 8,
-                "size_comm": 8,
-                "dist_visibility": 2,
-                "dist_comm": 2,
-                "len_trace": 2,
-                "policy_net": policy_net
-            }
+        env_config["task_name"], 
+        model_params=model_params
     )
 
     return server
