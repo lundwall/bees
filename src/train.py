@@ -33,14 +33,14 @@ def run(auto_init: bool,
     # calculate some configuration data into ray language
     # only used when train_batch_size is not a hyperparameter
     epochs_per_training_batch = tune_config["epochs_per_training_batch"]
-    checkpoint_every_n_timesteps = tune_config["checkpoint_every_n_timesteps"]
     train_batch_size = epochs_per_training_batch * env_config["env_config"]["max_steps"], # ts per iteration
     train_batch_size = train_batch_size[0]
-    checkpoint_frequency = int(checkpoint_every_n_timesteps/train_batch_size) # need to convert to iterations
     
     # make checkpoint frequency such that the biggest batch size still gets it, the smaller one produce more
+    checkpoint_every_n_timesteps = tune_config["checkpoint_every_n_timesteps"]
     max_training_batch_size = 4096
     min_checkpoint_frequency = int(checkpoint_every_n_timesteps/max_training_batch_size)
+    print(f"checkpointing schedule every {min_checkpoint_frequency} iterations")
 
     # set task environment
     env = None

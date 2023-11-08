@@ -2,6 +2,7 @@
 .wandb_key
 log/
 README.md
+.DS_Store
 
 # Output files
 *.out
