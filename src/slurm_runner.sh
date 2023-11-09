@@ -16,8 +16,6 @@ echo "Running on node: $(hostname)"
 echo "In directory:    $(pwd)"
 echo "Starting on:     $(date)"
 echo "SLURM_JOB_ID:    ${SLURM_JOB_ID}"
-echo ""
-
 
 # user argumetns
 ENV_CONFIG="env_comv0.json"
@@ -58,6 +56,7 @@ export TMPDIR
 # Change the current directory to the location where you want to store temporary files, exit if changing didn't succeed.
 # Adapt this to your personal preference
 cd "${TMPDIR}" || exit 1
+echo ""
 echo "-> create and set tmp directory ${TMPDIR}"
 
 # activate conda
