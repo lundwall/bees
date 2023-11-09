@@ -136,10 +136,6 @@ if __name__ == '__main__':
     parser.add_argument('-tune_config', default="tune_ppo.json", help="path to tune config")
 
     args = parser.parse_args()
-    print("===== run hyperparameter tuning =======")
-    for k, v in args.__dict__.items():
-        print(f"\t{k}: {v}")
-    print("\n")
 
     # load configs
     config_dir = os.path.join("src", "configs")
@@ -162,6 +158,11 @@ if __name__ == '__main__':
     if args.logging_config:
         logging_config = load_config_dict(os.path.join(config_dir, args.logging_config))
 
+    # sanity print
+    print("===== run hyperparameter tuning =======")
+    for k, v in args.__dict__.items():
+        print(f"\t{k}: {v}")
+    print("\n")
 
     run(auto_init=args.location=="cluster",
         logging_config=logging_config,
