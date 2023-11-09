@@ -43,9 +43,7 @@ def run(auto_init: bool,
     print(f"checkpointing schedule every {min_checkpoint_frequency} iterations")
 
     # set task environment
-    env = None
-    if env_config["task_name"] == "communication_v0":
-        env = CommunicationV0_env
+    env = CommunicationV0_env
     
     # create internal model from config
     model = {}
