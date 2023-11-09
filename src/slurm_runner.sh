@@ -18,6 +18,33 @@ echo "Starting on:     $(date)"
 echo "SLURM_JOB_ID:    ${SLURM_JOB_ID}"
 echo ""
 
+
+# user argumetns
+ENV_CONFIG="env_comv0.json"
+
+# check for user flags
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -env_config)
+      if [[ -n $2 ]]; then
+        ENV_CONFIG=$2
+        shift 2
+      else
+        echo "Error: Missing value for -env_config flag."
+        exit 1
+      fi
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+echo ""
+echo "--- USER ARGUMENTS ---"
+echo "ENV_CONFIG:       $ENV_CONFIG"
+
+
 # Set a directory for temporary files unique to the job with automatic removal at job termination
 TMPDIR=$(mktemp -d)
 if [[ ! -d ${TMPDIR} ]]; then
@@ -41,10 +68,11 @@ cd ${DIRECTORY}
 
 # Binary or script to execute
 echo "-> run train.py from directory $(pwd)"
-python /itet-stor/kpius/net_scratch/si_bees/src/train.py -location "cluster"
+python /itet-stor/kpius/net_scratch/si_bees/src/train.py -location "cluster" -env_config $ENV_CONFIG
 
 # Send more noteworthy information to the output log
 echo "Finished at:     $(date)"
 
 # End the script with exit code 0
 exit 0
+
