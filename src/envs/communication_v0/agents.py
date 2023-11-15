@@ -13,91 +13,96 @@ class Worker(mesa.Agent):
     workers that can walk around, communicate with each other
     """
     def __init__(self, unique_id: int, model: mesa.Model,
-                 n_hidden_vec: int = 8,
-                 n_comm_vec: int = 8,
-                 n_visibility_range: int = 4,
-                 n_comm_range: int = 4,
-                 n_trace_length: int = 1):
+                 size_com_vec: int = 8, com_range: int = 4,
+                 len_trace: int = 1):
         super().__init__(unique_id, model)
         self.name = f"worker_{unique_id}"
 
         # neighborhood variables
-        self.n_visibility_range = n_visibility_range
-        self.moore_nh = True
-        self.nh_size = (2 * self.n_visibility_range + 1)**2
+        self.com_range = com_range
+        self.nh_size = (2 * self.com_range + 1)**2
 
-        # internal state
-        self.n_comm_range = n_comm_range
-        self.n_comm_vec = n_comm_vec
-        self.comm_vec = np.zeros(shape=(n_comm_vec,))
+        # communication state
+        self.size_com_vec = size_com_vec
+        self.comm_vec = np.zeros(shape=(size_com_vec,))
         
-        self.n_hidden_vec = n_hidden_vec
-        self.hidden_vec = np.zeros(shape=(n_hidden_vec,))
+        # trace
+        self.len_trace = len_trace
+        self.trace_global_locations = list()
+
+    def get_obs_space(self) -> Tuple:
+        """
+        obs space is concatenation of the agents state and all nh_size neighbourhoods states
+        e.g. nh_size + 1 states
         
-        self.n_trace_length = n_trace_length
-        self.pos_history = list()
+        flag_active: if the state is to be used
+        trace: neihbourhood with past positions
+        plattform_location: one_hot encoded location in neighbourhood
+        plattform_occupation: -1 if not visible, else 0/1 if it is occupied
+        oracle_loaction: one_hot encoded location in neighbourhood
+        oracle_state: -1 if not visible, else what the oracle is saying
+        """
+        # agent state
+        flag_active = Box(0, 1, shape=(1,), dtype=np.int8)
+        trace = Box(0, 1, shape=(self.nh_size,), dtype=np.int8)
+        plattform_location = Box(0, 1, shape=(self.nh_size,), dtype=np.int8)
+        plattform_occupation = Box(-1, 1, shape=(1,), dtype=np.int8)
+        oracle_location = Box(0, 1, shape=(self.nh_size,), dtype=np.int8)
+        oracle_state = Box(-1, 1, shape=(1,), dtype=np.int8)
+        agent_state_obs_space = Tuple([flag_active, trace, plattform_location, plattform_occupation, oracle_location, oracle_state])
 
-
-    def get_comm_vec(self) -> np.array:
-        return self.comm_vec
-
-    def get_obs_space(self) -> dict:
-        # obs space
-        nh_trace = Box(0, 1, shape=(self.nh_size,), dtype=np.int8)
-        nh_plattform = Box(0, 1, shape=(self.nh_size,), dtype=np.int8)
-        bin_plattform_occupation = Box(-1, 1, shape=(1,), dtype=np.int8)
-        nh_oracle = Box(0, 1, shape=(self.nh_size,), dtype=np.int8)
-        bin_oracle_directives = Box(-1, 1, shape=(1,), dtype=np.int8)
-        comm_workers = Box(0, 1, shape=(self.nh_size, self.n_comm_vec), dtype=np.float64)
-        obs_space = Tuple(spaces=[
-            nh_trace,
-            nh_plattform,
-            bin_plattform_occupation,
-            nh_oracle,
-            bin_oracle_directives,
-            comm_workers
-        ])
-
-        return obs_space
+        return Tuple([agent_state_obs_space for _ in range(self.nh_size + 1)])
     
-    def observe(self) -> dict:
-        """
-        return observed environment of the agent
-        """
-        neighbors = self.model.grid.get_neighbors(self.pos, moore=self.moore_nh, radius=self.n_visibility_range)
+    def get_state(self) -> list:
+        """returns the agents own state as list of np.arrays, in the same format as defined in get_obs_state"""
+        # observations
+        is_active = np.array([1], dtype=np.int8)
+        trace = np.zeros(shape=(self.nh_size,), dtype=np.int8)
+        plattform_location = np.zeros(shape=(self.nh_size,), dtype=np.int8)
+        plattform_occupation = np.array([-1], dtype=np.int8)
+        oracle_location = np.zeros(shape=(self.nh_size,), dtype=np.int8)
+        oracle_state = np.array([-1], dtype=np.int8)
 
-        nh_trace = np.zeros(shape=(self.nh_size,), dtype=np.int8)
-        nh_plattform = np.zeros(shape=(self.nh_size,), dtype=np.int8)
-        bin_plattform_occupation = np.array([-1], dtype=np.int8)
-        nh_oracle = np.zeros(shape=(self.nh_size,), dtype=np.int8)
-        bin_oracle_directives = np.array([-1], dtype=np.int8)
-        comm_workers = np.zeros((self.nh_size, self.n_comm_vec), dtype=np.float64)
-        
+        # set trace
+        for p_trace in self.trace_global_locations:
+            # if trace_len is bigger than communication radius, it can happen that traces are not visible no more
+            if relative_moore_to_linear(get_relative_pos(self.pos, p_trace), radius=self.com_range) < self.nh_size:
+                trace[relative_moore_to_linear(get_relative_pos(self.pos, p_trace), radius=self.com_range)] = 1
+            
+        # set plattform and oracle observations
+        neighbors = self.model.grid.get_neighbors(self.pos, moore=True, radius=self.com_range, include_center=True)
         for n in neighbors:
             rel_pos = get_relative_pos(self.pos, n.pos)
-
-            if type(n) is Worker:
-                comm_workers[relative_moore_to_linear(rel_pos, radius=self.n_visibility_range)] = n.get_comm_vec()
-                # add trace
-                for p in self.pos_history:
-                    nh_trace[relative_moore_to_linear(rel_pos, radius=self.n_visibility_range)] = 1
-            elif type(n) is Oracle:
-                nh_oracle[relative_moore_to_linear(rel_pos, radius=self.n_visibility_range)] = 1
-                bin_oracle_directives[0] = n.get_state()
+            if type(n) is Oracle:
+                oracle_location[relative_moore_to_linear(rel_pos, radius=self.com_range)] = 1
+                oracle_state[0] = n.get_state()
             elif type(n) is Plattform:
-                nh_plattform[relative_moore_to_linear(rel_pos, radius=self.n_visibility_range)] = 1
-                bin_plattform_occupation[0] = len(n.get_occupants()) > 0
+                plattform_location[relative_moore_to_linear(rel_pos, radius=self.com_range)] = 1
+                plattform_occupation[0] = 1 if n.is_occupied() else 0
 
-        obs = tuple([
-            nh_trace,
-            nh_plattform,
-            bin_plattform_occupation,
-            nh_oracle,
-            bin_oracle_directives,
-            comm_workers
-        ])
+        return tuple([is_active, trace, plattform_location, plattform_occupation, oracle_location, oracle_state])
+
+    def observe(self) -> tuple:
+        """get observation in the form of get_obs_space()"""
+        obs = [self.get_state()]
+
+        # collect neighbours states
+        nh = self.model.grid.get_neighbors(self.pos, moore=True, radius=self.com_range, include_center=True)
+        nh = [n for n in nh if type(n) is Worker and n is not self]
+        for n in nh:
+            obs.append(n.get_state())
         
-        return obs
+        # append empty states
+        while len(obs) < self.nh_size + 1:
+            empty_obs = [np.zeros(shape=(1,)), 
+                         np.zeros(shape=(self.nh_size,)), 
+                         np.zeros(shape=(self.nh_size,)), 
+                         np.zeros(shape=(1,)), 
+                         np.zeros(shape=(self.nh_size,)), 
+                         np.zeros(shape=(1,))]
+            obs.append(tuple(empty_obs))
+        
+        return tuple(obs)
 
     def get_action_space(self) -> gymnasium.spaces.Space:
         """
@@ -109,13 +114,11 @@ class Worker(mesa.Agent):
             0: idle
             1: up
             2: down
-        h:      internal state
         c:      communication output
         """
         move_x = Discrete(3)
         move_y = Discrete(3)
-        h = Box(0, 1, shape=(self.n_hidden_vec,), dtype=np.float64)
-        c = Box(0, 1, shape=(self.n_comm_vec,), dtype=np.float64)
+        c = Box(0, 1, shape=(self.size_com_vec,), dtype=np.float64)
 
         action_space = Tuple([move_x, move_y, c])
 
@@ -138,7 +141,11 @@ class Worker(mesa.Agent):
         # decode action
         move_x, move_y, c = action
 
+        # update comm-vector
+        self.comm_vec = c
+
         # move agent within bounds, ignore out of bounds movement
+        old_pos = self.pos
         x_curr, y_curr = self.pos
         x_new = x_curr+1 if move_x == 1 else (x_curr-1 if move_x == 2 else x_curr)
         y_new = y_curr+1 if move_y == 1 else (y_curr-1 if move_y == 2 else y_curr)
@@ -148,12 +155,12 @@ class Worker(mesa.Agent):
         pos_updated = (x_updated, y_updated)
         self.model.grid.move_agent(self, pos_updated)
         
-        # update position history
-        self.pos_history.append(pos_updated)
-        if len(self.pos_history) > self.n_trace_length:
-            self.pos_history.pop(0)
-        assert len(self.pos_history) <= self.n_trace_length, "position history should not be longer than maximum allowed trace length"
-    
+        # update current location to trace
+        self.trace_global_locations.append(old_pos)
+        if len(self.trace_global_locations) > self.len_trace:
+            self.trace_global_locations.pop(0)
+        assert len(self.trace_global_locations) <= self.len_trace, "position history should not be longer than maximum allowed trace length"
+
 
 class Plattform(mesa.Agent):
     """
@@ -163,10 +170,10 @@ class Plattform(mesa.Agent):
         super().__init__(unique_id, model)
         self.name = f"plattform_{unique_id}"
 
-    def get_occupants(self) -> bool:
+    def is_occupied(self) -> bool:
         nbs = self.model.grid.get_neighbors(self.pos, moore=True, include_center=True, radius=0)
         nbs = [nb for nb in nbs if type(nb) is not Plattform]
-        return nbs
+        return len(nbs) > 0
 
 
 class Oracle(mesa.Agent):

@@ -2,24 +2,22 @@ import argparse
 import os
 import ray
 from ray import air, tune
+from ray.train import CheckpointConfig
+from ray.tune.schedulers import ASHAScheduler
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.air.integrations.wandb import WandbLoggerCallback
 from ray.rllib.utils.from_config import NotProvided
-from ray.train import CheckpointConfig
-from ray.tune.schedulers import ASHAScheduler
 from datetime import datetime
 
-
 from envs.communication_v0.environment import CommunicationV0_env 
-from models.fully_connected import FullyConnected
 from envs.communication_v0.callbacks import ReportModelStateCallback
 from envs.communication_v0.curriculum import curriculum_fn
+from envs.communication_v0.models.fully_connected import FullyConnected
+from envs.communication_v0.models.gnn_base import GNN_ComNet
 from configs.utils import load_config_dict
 
 
-def run(auto_init: bool,
-        logging_config: dict, 
-        resources_config: dict, 
+def run(logging_config: dict, 
         model_config: dict,
         env_config: dict,
         tune_config: dict):
@@ -50,6 +48,11 @@ def run(auto_init: bool,
     if model_config["model"] == "FullyConnected":
         model = {"custom_model": FullyConnected,
                 "custom_model_config": model_config["model_config"]}
+    elif model_config["model"] == "GNN_ComNet":
+        model = {"custom_model": GNN_ComNet,
+                "custom_model_config": model_config["model_config"]}
+    nh_size = (2 * env_config["env_config"]["agent_config"]["com_range"] + 1)**2
+    model["custom_model_config"]["n_states"] = nh_size + 1 # pass in neighborhood size to calculate per agent space size automatically
 
     # set config
     ppo_config = (
@@ -68,7 +71,7 @@ def run(auto_init: bool,
             grad_clip=1,
             grad_clip_by="value",
             model=model,
-            train_batch_size=tune.choice([8192, 16384, 32768]), # ts per iteration
+            train_batch_size=tune.choice([8192, 16384]), # ts per iteration
             _enable_learner_api=False
         )
         .rl_module(_enable_rl_module_api=False)
@@ -128,7 +131,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='script to setup hyperparameter tuning')
     parser.add_argument('-location', default="local", choices=['cluster', 'local'], help='execution location, setting depending variables')
     parser.add_argument('-logging_config', default=None, help="path to the logging config json, defaults to *_local or cluster, depending on location")
-    parser.add_argument('-resources_config', default=None, help="path to the available resources config json, defaults to *_local or cluster, depending on location")
     parser.add_argument('-model_config', default="model_fc.json", help="path to the NN model config")
     parser.add_argument('-env_config', default="env_comv0.json", help="path to task/ env config")
     parser.add_argument('-tune_config', default="tune_ppo.json", help="path to tune config")
@@ -143,18 +145,17 @@ if __name__ == '__main__':
     
     # location dependend configs
     if args.location == 'cluster':
-        resources_config = load_config_dict(os.path.join(config_dir, "resources_cluster.json"))
+        #resources_config = load_config_dict(os.path.join(config_dir, "resources_cluster.json"))
         logging_config = load_config_dict(os.path.join(config_dir, "logging_cluster.json"))
-
-    elif args.location == 'local':
-        resources_config = load_config_dict(os.path.join(config_dir, "resources_local.json"))
+    else:
+        #resources_config = load_config_dict(os.path.join(config_dir, "resources_local.json"))
         logging_config = load_config_dict(os.path.join(config_dir, "logging_local.json"))
 
     # override default configs
-    if args.resources_config:
-        resources_config = load_config_dict(os.path.join(config_dir, args.resources_config))
-    if args.logging_config:
-        logging_config = load_config_dict(os.path.join(config_dir, args.logging_config))
+    #if args.resources_config:
+    #    resources_config = load_config_dict(os.path.join(config_dir, args.resources_config))
+    #if args.logging_config:
+    #    logging_config = load_config_dict(os.path.join(config_dir, args.logging_config))
 
     # sanity print
     print("===== run hyperparameter tuning =======")
@@ -162,9 +163,7 @@ if __name__ == '__main__':
         print(f"\t{k}: {v}")
     print("\n")
 
-    run(auto_init=args.location=="cluster",
-        logging_config=logging_config,
-        resources_config=resources_config,
+    run(logging_config=logging_config,
         model_config=model_config,
         env_config=env_config,
         tune_config=tune_config)
