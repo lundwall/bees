@@ -5,42 +5,49 @@ from ray import air, tune
 from ray.rllib.algorithms.ppo import PPOConfig
 
 from configs.utils import load_config_dict
-from envs.communication_v0.environment import CommunicationV0_env
-from models.fully_connected import FullyConnected
-from models.gnn_base import GNN_ComNet
-from envs.communication_v0.callbacks import ReportModelStateCallback
+from envs.communication_v0.models.fully_connected import FullyConnected
+from envs.communication_v0.models.gnn_base import GNN_ComNet
+from callbacks import ReportModelStateCallback
+from envs.communication_v1.environment import CommunicationV1_env
+from envs.communication_v1.models.pyg import GNN_PyG
+from utils import create_tunable_config, filter_actor_gnn_tunables
+
 
 config_dir = os.path.join("src", "configs") 
-env_config = load_config_dict(os.path.join(config_dir, "env_comv0_1_debug.json"))
+env_config = load_config_dict(os.path.join(config_dir, "env_comv1.json"))
 tune_config = load_config_dict(os.path.join(config_dir, "tune_ppo.json"))
 logging_config = load_config_dict(os.path.join(config_dir, "logging_local.json"))
 
+actor_config = load_config_dict(os.path.join(config_dir, "model_pyg_gat.json"))
+critic_config = load_config_dict(os.path.join(config_dir, "model_pyg_gin.json"))
+
 ray.init(num_cpus=1, local_mode=True)
 
-env = CommunicationV0_env
+env = CommunicationV1_env
 
-# create internal model from config
-fc_config = load_config_dict(os.path.join(config_dir, "model_fc.json")) 
-model_fc = {"custom_model": FullyConnected,
-        "custom_model_config": fc_config["model_config"]}
-
-gnn_config = load_config_dict(os.path.join(config_dir, "model_gnn_comnet.json")) 
-model_gnn = {"custom_model": GNN_ComNet,
-        "custom_model_config": gnn_config["model_config"]}
+model = {}
+tunable_model_config = {}
+tunable_model_config["actor_config"] = filter_actor_gnn_tunables(create_tunable_config(actor_config))
+tunable_model_config["critic_config"] = create_tunable_config(critic_config)
+    
+env = CommunicationV1_env
+model = {"custom_model": GNN_PyG,
+        "custom_model_config": tunable_model_config}
+model["custom_model_config"]["n_agents"] = env_config["agent_config"]["n_agents"]
 
 
 ppo_config = (
     PPOConfig()
     .environment(
         env, # @todo: need to build wrapper
-        env_config=env_config["env_config"],
+        env_config=env_config,
         disable_env_checking=True)
     .training(
         gamma=0.1,
         lr=0.0005,
         grad_clip=1,
         grad_clip_by="value",
-        model=model_gnn,
+        model=model,
         train_batch_size=128, # ts per iteration
         _enable_learner_api=False
     )

@@ -1,10 +1,9 @@
 
 {
-    "model": "FullyConnected",
-    "model_config": {
-        "nn_action_hiddens": [256, 256],
-        "nn_action_activation": "relu",
-        "nn_value_hiddens": [256, 256],
-        "nn_value_activation": "relu"
-    }
+    "model": "fc",
+    "mlp_hiddens": {
+        "min": 0,
+        "max": 4
+    },
+    "mlp_hiddens_size": [16, 32, 64]
 }
