@@ -5,8 +5,6 @@ from ray import air, tune
 from ray.rllib.algorithms.ppo import PPOConfig
 
 from configs.utils import load_config_dict
-from envs.communication_v0.models.fully_connected import FullyConnected
-from envs.communication_v0.models.gnn_base import GNN_ComNet
 from callbacks import ReportModelStateCallback
 from envs.communication_v1.environment import CommunicationV1_env
 from envs.communication_v1.models.pyg import GNN_PyG
@@ -14,12 +12,13 @@ from utils import create_tunable_config, filter_actor_gnn_tunables
 
 
 config_dir = os.path.join("src", "configs") 
-env_config = load_config_dict(os.path.join(config_dir, "env_comv1_2.json"))
+env_config = load_config_dict(os.path.join(config_dir, "env_comv1_1.json"))
 tune_config = load_config_dict(os.path.join(config_dir, "tune_ppo.json"))
 logging_config = load_config_dict(os.path.join(config_dir, "logging_local.json"))
 
-actor_config = load_config_dict(os.path.join(config_dir, "model_pyg_gat.json"))
-critic_config = load_config_dict(os.path.join(config_dir, "model_pyg_gin.json"))
+actor_config = load_config_dict(os.path.join(config_dir, "model_GINE.json"))
+critic_config = load_config_dict(os.path.join(config_dir, "model_GATv2.json"))
+encoders = load_config_dict(os.path.join(config_dir, "encoders_sincos.json"))
 
 ray.init(num_cpus=1, local_mode=True)
 
@@ -29,11 +28,11 @@ model = {}
 tunable_model_config = {}
 tunable_model_config["actor_config"] = filter_actor_gnn_tunables(create_tunable_config(actor_config))
 tunable_model_config["critic_config"] = create_tunable_config(critic_config)
+tunable_model_config["encoders_config"] = create_tunable_config(encoders)
     
 env = CommunicationV1_env
 model = {"custom_model": GNN_PyG,
         "custom_model_config": tunable_model_config}
-model["custom_model_config"]["n_agents"] = env_config["agent_config"]["n_agents"]
 
 
 ppo_config = (
