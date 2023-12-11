@@ -21,49 +21,92 @@ from utils import create_tunable_config, filter_actor_gnn_tunables
 wandb_logger = logging.getLogger("wandb")
 wandb_logger.setLevel(logging.WARNING)
 
-def run(logging_config: dict, 
-        actor_config: dict,
-        critic_config: dict,
-        encoders_config: dict,
-        env_config: dict,
-        tune_config: dict):
+# create tunable configs
+def build_model_config(actor_config: dict, critic_config: dict, encoders_config: dict, performance_study: bool):
+    tunable_model_config = dict()
+    # create fixed set of model parameters for performance study
+    if performance_study:
+        tunable_model_config["actor_config"] = {
+            "model": "GINEConv",
+            "mlp_hiddens": 2,
+            "mlp_hiddens_size": 32}
+        tunable_model_config["critic_config"] = {
+            "model": "GATConv",
+            "critic_rounds": 2,
+            "critic_fc": True,
+            "dropout": 0.003}
+        tunable_model_config["encoders_config"] = {
+            "encoding_size": 8,
+            "node_encoder": "fc",
+            "node_encoder_hiddens": 2,
+            "node_encoder_hiddens_size": 16,
+            "edge_encoder": "sincos"}
+    # make configs tunable
+    else:
+        tunable_model_config["actor_config"] = filter_actor_gnn_tunables(create_tunable_config(actor_config))
+        tunable_model_config["critic_config"] = create_tunable_config(critic_config)
+        tunable_model_config["encoders_config"] = create_tunable_config(encoders_config)
+    
+    return tunable_model_config
+
+
+def run(logging_config: str,
+        actor_config: str,
+        critic_config: str,
+        encoders_config: str,
+        env_config: str,
+        tune_samples: int = 1000, 
+        min_episodes: int = 100, max_episodes: int = 200, batch_size_episodes: int = 4,
+        performance_study: bool = False, ray_threads = None,
+        rollout_workers: int = 0, cpus_per_worker: int = 1, cpus_for_local_worker: int = 1):
     """starts a run with the given configurations"""
 
-    ray.init()
+    if ray_threads:
+        ray.init(num_cpus=ray_threads)
+    else:
+        ray.init()
     
-    group_name = f"a-{actor_config['model']}_c-{critic_config['model']}_e-{encoders_config['edge_encoder']}"
-    run_name = f"{group_name}_{datetime.now().strftime('%Y%m%d%H%M-%S')}"
+    group_name = f"a{actor_config['model']}_c{critic_config['model']}_e{encoders_config['node_encoder']}_{encoders_config['edge_encoder']}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    if performance_study:
+        group_name = f"perf_batchsize-{batch_size_episodes}_rollouts-{rollout_workers}_cpus-{cpus_per_worker}_cpus_local-{cpus_for_local_worker}"
+    run_name = group_name
     storage_path = os.path.join(logging_config["storage_path"])
-    local_dir = os.path.join(logging_config["storage_path"], "ray_results")
 
-    env = CommunicationV1_env
-    tunable_model_config = {}
-    tunable_model_config["actor_config"] = filter_actor_gnn_tunables(create_tunable_config(actor_config))
-    tunable_model_config["critic_config"] = create_tunable_config(critic_config)
-    tunable_model_config["encoders_config"] = create_tunable_config(encoders_config)
+    tune.register_env("CommunicationV1_env", lambda env_config: CommunicationV1_env(env_config))
     model = {"custom_model": GNN_PyG,
-            "custom_model_config": tunable_model_config}
+            "custom_model_config": build_model_config(actor_config, critic_config, encoders_config, performance_study)}
+    curriculum = curriculum_fn if env_config["curriculum_learning"] and not performance_study else NotProvided
+    episode_len = env_config["max_steps"]
+    min_timesteps = min_episodes * (episode_len + 1)
+    max_timesteps = max_episodes * (episode_len + 1) if not performance_study else min_timesteps + 1
+    batch_size = batch_size_episodes * (episode_len + 1)
 
     # ppo config
     ppo_config = (
         PPOConfig()
         .environment(
-            env, # @todo: need to build wrapper
+            "CommunicationV1_env",
             env_config=env_config,
-            env_task_fn=curriculum_fn if env_config["curriculum_learning"] else NotProvided,
-            disable_env_checking=True)
+            disable_env_checking=True,
+            env_task_fn=curriculum
+        )
         .training(
             gamma=tune.uniform(0.1, 0.9),
             lr=tune.uniform(1e-4, 1e-1),
             grad_clip=1,
             grad_clip_by="value",
             model=model,
-            train_batch_size=tune.choice([256, 512]),
-            _enable_learner_api=False
+            train_batch_size=batch_size,
+            _enable_learner_api=False,
+        )
+        .rollouts(num_rollout_workers=rollout_workers)
+        .resources(
+            num_cpus_per_worker=cpus_per_worker,
+            num_cpus_for_local_worker=cpus_for_local_worker,
+            placement_strategy="PACK",
         )
         .rl_module(_enable_rl_module_api=False)
         .callbacks(ReportModelStateCallback)
-        .multi_agent(count_steps_by="env_steps")
     )
 
     # logging callback
@@ -79,26 +122,25 @@ def run(logging_config: dict,
     # run and checkpoint config
     run_config = air.RunConfig(
         name=run_name,
-        stop={"timesteps_total": tune_config["max_timesteps"]}, # https://docs.ray.io/en/latest/tune/tutorials/tune-metrics.html#tune-autofilled-metrics
+        stop={"timesteps_total": max_timesteps}, # https://docs.ray.io/en/latest/tune/tutorials/tune-metrics.html#tune-autofilled-metrics
         storage_path=storage_path,
-        local_dir=local_dir,
         callbacks=callbacks,
-        checkpoint_config=CheckpointConfig(
-            checkpoint_score_attribute="custom_metrics/curr_learning_score_mean",
-            num_to_keep=10,
-            checkpoint_frequency=50,
-            checkpoint_at_end=True),
+        # checkpoint_config=CheckpointConfig(
+        #     checkpoint_score_attribute="custom_metrics/curr_learning_score_mean",
+        #     num_to_keep=10,
+        #     checkpoint_frequency=50,
+        #     checkpoint_at_end=True),
     )
 
     # tune config
     tune_config = tune.TuneConfig(
-            num_samples=tune_config["num_samples"],
+            num_samples=tune_samples,
             scheduler= ASHAScheduler(
                 time_attr='timesteps_total',
                 metric='custom_metrics/curr_learning_score_mean',
                 mode='max',
-                max_t=tune_config["max_timesteps"],
-                grace_period=tune_config["min_timesteps"],
+                grace_period=min_timesteps,
+                max_t=max_timesteps,
                 reduction_factor=2)
         )
 
@@ -115,11 +157,20 @@ def run(logging_config: dict,
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='script to setup hyperparameter tuning')
     parser.add_argument('--location', default="local", choices=['cluster', 'local'], help='execution location, setting depending variables')
-    parser.add_argument('--actor_config', default=None, help="path to the actor model config")
-    parser.add_argument('--critic_config', default=None, help="path to the critic model config")
-    parser.add_argument('--encoders_config', default=None, help="path to the encoders config")
-    parser.add_argument('--env_config', default=None, help="path to env config")
-    parser.add_argument('--tune_config', default="tune_ppo.json", help="path to tune config")
+    parser.add_argument('--actor_config', default="model_GINE.json", help="path to the actor model config")
+    parser.add_argument('--critic_config', default="model_GAT.json", help="path to the critic model config")
+    parser.add_argument('--encoders_config', default="encoders_sincos.json", help="path to the encoders config")
+    parser.add_argument('--env_config', default="env_comv1_1.json", help="path to env config")
+    parser.add_argument('--performance_study', default=False, action='store_true', help='run performance study with fixed set of parameters and run length')
+    parser.add_argument('--ray_threads', default=None, type=int, help="number of threads to use for ray")
+    parser.add_argument('--rollout_workers', default=0, type=int, help="number of rollout workers")
+    parser.add_argument('--cpus_per_worker', default=1, type=int, help="number of cpus per rollout worker")
+    parser.add_argument('--cpus_for_local_worker', default=1, type=int, help="number of cpus for local worker")
+    parser.add_argument('--batch_size_episodes', default=4, type=int, help="batch size episodes for training")
+    parser.add_argument('--min_episodes', default=100, type=int, help="min number of min_episodes to run")
+    parser.add_argument('--max_episodes', default=1000, type=int, help="max number of min_episodes to run")
+    parser.add_argument('--tune_samples', default=1000, type=int, help="number of samples to run")
+    
 
     args = parser.parse_args()
 
@@ -129,7 +180,6 @@ if __name__ == '__main__':
     critic_config = load_config_dict(os.path.join(config_dir, args.critic_config))
     encoders_config = load_config_dict(os.path.join(config_dir, args.encoders_config))
     env_config = load_config_dict(os.path.join(config_dir, args.env_config))
-    tune_config = load_config_dict(os.path.join(config_dir, args.tune_config))
     
     # logging config
     if args.location == 'cluster':
@@ -148,7 +198,15 @@ if __name__ == '__main__':
         critic_config=critic_config,
         encoders_config=encoders_config,
         env_config=env_config,
-        tune_config=tune_config)
+        performance_study=args.performance_study,
+        tune_samples=args.tune_samples,
+        min_episodes=args.min_episodes,
+        max_episodes=args.max_episodes,
+        batch_size_episodes=args.batch_size_episodes,
+        ray_threads=args.ray_threads, 
+        rollout_workers=args.rollout_workers, 
+        cpus_per_worker=args.cpus_per_worker,
+        cpus_for_local_worker=args.cpus_for_local_worker)
 
 
 
