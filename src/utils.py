@@ -1,6 +1,9 @@
 
 import random
 from ray import tune
+import torch
+from gymnasium.spaces import Space, Box, Tuple, Discrete
+
 
 def get_relative_pos(p1, p2) -> [int, int]:
     """
@@ -64,6 +67,61 @@ def create_tunable_config(config):
     return tunable_config
 
 # set num rounds of actor config to one, as being overriden in a later stage
-def filter_actor_gnn_tunables(config):
-    config["critic_rounds"] = 1
+def filter_tunables(config):
+    config["rounds"] = 1
     return config
+
+# builds graph from observation
+def build_graph_v2(num_agents: int, agent_obss: Tuple, edge_obss: Tuple, batch_index: int):
+    # check if data is preprocessed or not
+    try:
+        curr_edge_obs = torch.cat(edge_obss[0], dim=1)
+        distribution_data = True
+    except IndexError:
+        distribution_data = False
+
+    x = []
+    actor_froms, actor_tos, actor_edge_attr = [], [], []
+    fc_froms, fc_tos, fc_edge_attr = [], [], []
+    
+    if distribution_data:
+        # concatenate all agent observations into a single tensor
+        for j in range(num_agents):
+            curr_agent_obs = torch.cat(agent_obss[j], dim=1)
+            x.append(curr_agent_obs[batch_index])
+
+        # build edge index from adjacency matrix
+        for j in range(num_agents ** 2):
+            curr_edge_obs = torch.cat(edge_obss[j], dim=1)
+            
+            # add edge to actor graph
+            if edge_obss[j][0][batch_index][1] == 1: # gym.Discrete(2) maps to one-hot encoding, 0 = [1,0], 1 = [0,1]
+                actor_froms.append(j // num_agents)
+                actor_tos.append(j % num_agents)
+                actor_edge_attr.append(curr_edge_obs[batch_index])
+            # add edge to fc graph
+            fc_froms.append(j // num_agents)
+            fc_tos.append(j % num_agents)
+            fc_edge_attr.append(curr_edge_obs[batch_index])
+       # print(x, actor_edge_attr)
+    else:
+        # concatenate all agent observations into a single tensor
+        for j in range(num_agents):
+            curr_agent_obs = torch.cat(agent_obss[j], dim=0)
+            x.append(curr_agent_obs[batch_index])
+
+        # build edge index from adjacency matrix
+        for j in range(num_agents ** 2):
+            curr_edge_obs = torch.cat([torch.flatten(t) for t in edge_obss[j]]) # weird nesting
+            # add edge to actor graph
+            if edge_obss[j][0][batch_index] == 1: # actual number, 1 if valid graph
+                actor_froms.append(j // num_agents)
+                actor_tos.append(j % num_agents)
+                actor_edge_attr.append(curr_edge_obs[batch_index])
+            # add edge to fc graph
+            fc_froms.append(j // num_agents)
+            fc_tos.append(j % num_agents)
+            fc_edge_attr.append(curr_edge_obs[batch_index])
+        #print(x, actor_edge_attr)
+        
+    return x, [actor_froms, actor_tos], actor_edge_attr, [fc_froms, fc_tos], fc_edge_attr
