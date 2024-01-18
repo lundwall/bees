@@ -76,9 +76,9 @@ class Simple_model(mesa.Model):
     def get_obs_space(self) -> gymnasium.spaces.Space:
         """ obs space consisting of all agent states + adjacents matrix with edge attributes """
         agent_state = [
-            Discrete(3), # agent type
+            Discrete(3),                    # agent type
+            Discrete(self.n_oracle_states)  # current output
             #Box(0, 1, shape=(self.size_hidden_vec,), dtype=np.float32), # hidden vector
-            Discrete(self.n_oracle_states) # current output
         ]
         agent_states = Tuple([Tuple(agent_state) for _ in range(self.n_agents)])
 
