@@ -14,7 +14,7 @@ from callback import SimpleCallback
 from environment import Simple_env
 from pyg import GNN_PyG
 from utils import create_tunable_config, filter_tunables, read_yaml_config
-from stopper import MaxTimestepsStopper, RewardMinStopper
+from stopper import MaxTimestepsStopper, RewardComboStopper, RewardMinStopper
 
 # surpress excessive logging
 wandb_logger = logging.getLogger("wandb")
@@ -33,7 +33,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.local:
-        ray.init(num_cpus=1, local_mode=True)
+        ray.init()
+        #ray.init(num_cpus=1, local_mode=True)
     else:
         ray.init(num_cpus=args.num_cpus)
     tune.register_env("Simple_env", lambda env_config: Simple_env(env_config))
@@ -59,7 +60,7 @@ if __name__ == '__main__':
     # default values: https://github.com/ray-project/ray/blob/e6ae08f41674d2ac1423f3c2a4f8d8bd3500379a/rllib/agents/ppo/ppo.py
     ppo_config.training(
             model=model,
-            train_batch_size=512,
+            train_batch_size=tune.choice([256, 512, 2048]),
             shuffle_sequences=True,
             lr=tune.uniform(5e-6, 0.003),
             gamma=0.99,
@@ -81,6 +82,7 @@ if __name__ == '__main__':
             placement_strategy="PACK")
     ppo_config.rl_module(_enable_rl_module_api=False)
     ppo_config.callbacks(SimpleCallback)
+    ppo_config.reporting(keep_per_episode_custom_metrics=True)
 
 
     # run and checkpoint config
@@ -89,11 +91,10 @@ if __name__ == '__main__':
         storage_path="/Users/sega/Code/si_bees/log" if args.local else "/itet-stor/kpius/net_scratch/si_bees/log",
         local_dir="/Users/sega/Code/si_bees/log" if args.local else "/itet-stor/kpius/net_scratch/si_bees/log",
         stop=CombinedStopper(
-            RewardMinStopper(min_reward_threshold=80),
-            MaxTimestepsStopper(max_timesteps=35000),
+            MaxTimestepsStopper(max_timesteps=5000000),
         ),        
         checkpoint_config=CheckpointConfig(
-            checkpoint_score_attribute="episode_reward_min",
+            checkpoint_score_attribute="episode_reward_mean",
             num_to_keep=1,
             checkpoint_frequency=10,
             checkpoint_at_end=True),
@@ -109,10 +110,10 @@ if __name__ == '__main__':
             num_samples=100000,
             scheduler= ASHAScheduler(
                 time_attr='timesteps_total',
-                metric='episode_reward_min',
+                metric='episode_reward_mean',
                 mode='max',
-                grace_period=5000,
-                max_t=35000,
+                grace_period=100000,
+                max_t=5000000,
                 reduction_factor=2)
         )
 

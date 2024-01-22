@@ -31,6 +31,7 @@ class Simple_model(mesa.Model):
         self.n_workers = config["model"]["n_workers"]
         self.n_agents = self.n_workers + 1
         self.n_oracle_states = config["model"]["n_oracle_states"]
+        self.n_hidden_states = config["model"]["n_hidden_state"]
         self.communication_range = config["model"]["communication_range"]
 
         # mesa setup
@@ -53,9 +54,12 @@ class Simple_model(mesa.Model):
         for _ in range(self.n_workers):
             x_old, y_old = self.schedule.agents[-1].pos
             x_new, y_new = x_old + self.communication_range - 1, y_old
-            worker = Worker(self._next_id(), self, output=worker_output)
+            worker = Worker(self._next_id(), self, output=worker_output, n_hidden_states=self.n_hidden_states)
             self.grid.place_agent(agent=worker, pos=(x_new, y_new))
             self.schedule.add(worker)
+
+        # tracking attributes
+        self.ts_to_convergence = -1
 
         # inference mode
         self.inference_mode = inference_mode
@@ -69,16 +73,17 @@ class Simple_model(mesa.Model):
     
     def get_action_space(self) -> gymnasium.spaces.Space:
         agent_actions = [
-            Discrete(self.n_oracle_states), # output
+            Discrete(self.n_oracle_states),                             # output
+            Box(0, 1, shape=(self.n_hidden_states,), dtype=np.float32), # hidden state
         ]
         return Tuple([Tuple(agent_actions) for _ in range(self.n_workers)])
     
     def get_obs_space(self) -> gymnasium.spaces.Space:
         """ obs space consisting of all agent states + adjacents matrix with edge attributes """
         agent_state = [
-            Discrete(3),                    # agent type
-            Discrete(self.n_oracle_states)  # current output
-            #Box(0, 1, shape=(self.size_hidden_vec,), dtype=np.float32), # hidden vector
+            Discrete(3),                                                # agent type
+            Discrete(self.n_oracle_states),                             # current output
+            Box(0, 1, shape=(self.n_hidden_states,), dtype=np.float32), # hidden state
         ]
         agent_states = Tuple([Tuple(agent_state) for _ in range(self.n_agents)])
 
@@ -96,12 +101,12 @@ class Simple_model(mesa.Model):
         for i, worker in enumerate(self.schedule.agents):
             if type(worker) is Oracle:
                 agent_states[i] = tuple([TYPE_ORACLE, 
-                                         #np.zeros(self.size_hidden_vec),
-                                         worker.state])
+                                         worker.state,
+                                         np.zeros(self.n_hidden_states)])
             if type(worker) is Worker:
                 agent_states[i] = tuple([TYPE_WORKER, 
-                                         #worker.hidden_vec, 
-                                         worker.output])
+                                         worker.output, 
+                                         worker.hidden_state])
         # edge attributes
         edge_states = [None for _ in range(self.n_agents ** 2)]
         for i, worker in enumerate(self.schedule.agents):
@@ -126,12 +131,14 @@ class Simple_model(mesa.Model):
             if self.policy_net:
                 actions = self.policy_net.compute_single_action(self.get_obs())
             else:
+                actions = self.get_action_space().sample()
                 print("prick")
         
         # proceed simulation
         for i, worker in enumerate(self.schedule.agents[1:]):
             assert type(worker) == Worker
             worker.output = actions[i][0]
+            worker.hidden_state = actions[i][1]
         self.curr_step += 1
         
         # compute reward and state
@@ -139,6 +146,10 @@ class Simple_model(mesa.Model):
         reward = 10 if wrongs == 0 else -wrongs
         terminated = wrongs == 0 and self.curr_step >= self.min_steps
         truncated = self.curr_step >= self.max_steps
+
+        # track attributes
+        if wrongs == 0 and self.ts_to_convergence < 0:
+            self.ts_to_convergence = self.curr_step
 
         # print overview
         if self.inference_mode:
