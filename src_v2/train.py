@@ -10,6 +10,8 @@ from ray.tune.schedulers import ASHAScheduler
 from ray.rllib.algorithms.ppo import PPOConfig
 from datetime import datetime
 
+import torch
+
 from callback import SimpleCallback
 from environment import Simple_env
 from pyg import GNN_PyG
@@ -37,8 +39,8 @@ if __name__ == '__main__':
         ray.init()
         #ray.init(num_cpus=1, local_mode=True)
     else:
-        ray.init(num_cpus=int(args.num_ray_threads), num_gpus=int(args.num_gpus))
-        
+        ray.init(num_cpus=int(args.num_ray_threads))
+
     tune.register_env("Simple_env", lambda env_config: Simple_env(env_config))
     
     run_name = f"simple-env-{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -59,6 +61,10 @@ if __name__ == '__main__':
             env="Simple_env",
             env_config=env_config,
             disable_env_checking=True)
+    ppo_config.resources(
+            num_cpus_per_worker=1,
+            num_cpus_for_local_worker=2,
+            placement_strategy="PACK")
     # default values: https://github.com/ray-project/ray/blob/e6ae08f41674d2ac1423f3c2a4f8d8bd3500379a/rllib/agents/ppo/ppo.py
     ppo_config.training(
             model=model,
@@ -78,10 +84,6 @@ if __name__ == '__main__':
             grad_clip_by="value",
             _enable_learner_api=False)
     ppo_config.rollouts(num_rollout_workers=1)
-    ppo_config.resources(
-            num_cpus_per_worker=1,
-            num_cpus_for_local_worker=2,
-            placement_strategy="PACK")
     ppo_config.rl_module(_enable_rl_module_api=False)
     ppo_config.callbacks(SimpleCallback)
     ppo_config.reporting(keep_per_episode_custom_metrics=True)
@@ -114,7 +116,7 @@ if __name__ == '__main__':
                 time_attr='timesteps_total',
                 metric='episode_reward_mean',
                 mode='max',
-                grace_period=100000,
+                grace_period=35000,
                 max_t=5000000,
                 reduction_factor=2)
         )

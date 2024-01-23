@@ -115,7 +115,7 @@ class GNN_PyG(TorchModelV2, Module):
         feed it to the _actor and _critic methods to get the outputs, those methods are implemented by a subclass
 
         note: the construction of the graph is tightly coupled to the format of the obs_space defined in the model class
-        """    
+        """ 
         obss = input_dict["obs"]
         obss_flat = input_dict["obs_flat"]
         agent_obss = obss[0]
