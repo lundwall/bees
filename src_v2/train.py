@@ -1,6 +1,12 @@
+import os
+os.environ["WANDB__SERVICE_WAIT"] = "600"
+os.sched_setaffinity(0, range(os.cpu_count())) 
+print(f"-> cpu count: ", os.cpu_count())
+print(f"-> cpu affinity: ", os.sched_getaffinity(0))
+
+import time
 import argparse
 import logging
-import os
 import ray
 from ray import air, tune
 from ray.train import CheckpointConfig
@@ -19,26 +25,39 @@ from utils import create_tunable_config, filter_tunables, read_yaml_config
 from stopper import MaxTimestepsStopper, RewardComboStopper, RewardMinStopper
 
 # surpress excessive logging
-wandb_logger = logging.getLogger("wandb")
-wandb_logger.setLevel(logging.WARNING)
+#wandb_logger = logging.getLogger("wandb")
+#wandb_logger.setLevel(logging.WARNING)
 wandbactor_logger = logging.getLogger("_WandbLoggingActor")
-wandbactor_logger.setLevel(logging.WARNING)
+wandbactor_logger.setLevel(logging.DEBUG)
+
 
 # script
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='script to setup hyperparameter tuning')
     parser.add_argument('--local',              action='store_true', help='execution location (default: False)')
     parser.add_argument('--num_ray_threads',    default=36, help='default processes for ray to use')
-    parser.add_argument('--num_gpus',           default=0, help='default number of gpus to use')
+    parser.add_argument('--num_cpu_for_local',  default=1, help='num cpus for local worker')
+    parser.add_argument('--enable_gpu',         action='store_true', help='enable use of gpu')
     parser.add_argument('--env_config',         default=None, help="path to env config")
     parser.add_argument('--actor_config',       default=None, help="path to actor config")
     parser.add_argument('--critic_config',      default=None, help="path to critic config")
     args = parser.parse_args()
 
+    print("-> start tune with following parameters")
+    print(args)
+    use_cuda = args.enable_gpu and torch.cuda.is_available()
+    storage_dir = "/Users/sega/Code/si_bees/log" if args.local else "/itet-stor/kpius/net_scratch/si_bees/log"
+
     if args.local:
+        print(f"-> using autoscale")
         ray.init()
         #ray.init(num_cpus=1, local_mode=True)
+    elif use_cuda:
+        # @todo: investigate gpu utilisation
+        print(f"-> using {int(args.num_ray_threads)} cpus and a gpu ({os.environ['CUDA_VISIBLE_DEVICES']})")
+        ray.init(num_cpus=int(args.num_ray_threads), num_gpus=1)
     else:
+        print(f"-> using {int(args.num_ray_threads)} cpus")
         ray.init(num_cpus=int(args.num_ray_threads))
 
     tune.register_env("Simple_env", lambda env_config: Simple_env(env_config))
@@ -51,6 +70,7 @@ if __name__ == '__main__':
     pyg_config = dict()
     pyg_config["actor_config"] = filter_tunables(create_tunable_config(actor_config))
     pyg_config["critic_config"] = create_tunable_config(critic_config)
+    pyg_config["use_cuda"] = use_cuda
     pyg_config["info"] = ""
     model = {"custom_model": GNN_PyG,
              "custom_model_config": pyg_config}
@@ -61,10 +81,6 @@ if __name__ == '__main__':
             env="Simple_env",
             env_config=env_config,
             disable_env_checking=True)
-    ppo_config.resources(
-            num_cpus_per_worker=1,
-            num_cpus_for_local_worker=2,
-            placement_strategy="PACK")
     # default values: https://github.com/ray-project/ray/blob/e6ae08f41674d2ac1423f3c2a4f8d8bd3500379a/rllib/agents/ppo/ppo.py
     ppo_config.training(
             model=model,
@@ -83,17 +99,31 @@ if __name__ == '__main__':
             grad_clip=1,
             grad_clip_by="value",
             _enable_learner_api=False)
-    ppo_config.rollouts(num_rollout_workers=1)
     ppo_config.rl_module(_enable_rl_module_api=False)
     ppo_config.callbacks(SimpleCallback)
     ppo_config.reporting(keep_per_episode_custom_metrics=True)
 
+    # @todo: investigate gpu utilisation
+    if use_cuda:
+        ppo_config.rollouts(num_rollout_workers=0)
+        ppo_config.resources(
+                num_gpus=0.2,
+                #num_cpus_for_local_worker=2,
+                #num_learner_workers=0,
+                #num_gpus_per_learner_worker=1,
+                #num_cpus_per_worker=1,
+                placement_strategy="PACK")
+    else:
+        ppo_config.rollouts(num_rollout_workers=0)
+        ppo_config.resources(
+                num_cpus_for_local_worker=int(args.num_cpu_for_local),
+                placement_strategy="PACK")
 
     # run and checkpoint config
     run_config = air.RunConfig(
         name=run_name,
-        storage_path="/Users/sega/Code/si_bees/log" if args.local else "/itet-stor/kpius/net_scratch/si_bees/log",
-        local_dir="/Users/sega/Code/si_bees/log" if args.local else "/itet-stor/kpius/net_scratch/si_bees/log",
+        storage_path=storage_dir,
+        local_dir=storage_dir,
         stop=CombinedStopper(
             MaxTimestepsStopper(max_timesteps=5000000),
         ),        

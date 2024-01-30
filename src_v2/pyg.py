@@ -33,6 +33,7 @@ class GNN_PyG(TorchModelV2, Module):
         actor_config = config["actor_config"]
         critic_config = config["critic_config"]
         self.critic_is_fc = config["critic_config"]["model"] == "fc"
+        self.device = torch.device("cuda:0" if config["use_cuda"] else "cpu")
 
         # model dimensions
         og_obs_space = obs_space.original_space
@@ -56,11 +57,22 @@ class GNN_PyG(TorchModelV2, Module):
                                         outs=1, 
                                         edge_dim=self.encoding_size, 
                                         add_pooling=True)
+        
+        # put to correct device
+        self.node_encoder.to(device=self.device)
+        self.edge_encoder.to(device=self.device)
+        self.actor.to(device=self.device)
+        self.critic.to(device=self.device)
 
-        print("actor: ", self.actor)
-        print("critic: ", self.critic)
-        print("node encoder: ", self.node_encoder)
-        print("edge encoder: ", self.edge_encoder)
+        print(f"actor ({next(self.actor.parameters()).device}): ", self.actor)
+        print(f"critic ({next(self.critic.parameters()).device}): ", self.critic)
+        print(f"node encoder ({next(self.node_encoder.parameters()).device}): ", self.node_encoder)
+        print(f"edge encoder ({next(self.edge_encoder.parameters()).device}): ", self.edge_encoder)
+        print(f"device: ", self.device)
+        print(f"  cuda_is_available={torch.cuda.is_available()}")
+        print(f"  use_cuda={config['use_cuda']}")
+
+        
         
     def __build_fc(self, ins: int, outs: int, hiddens: list):
         """builds a fully connected network with relu activation"""
@@ -130,13 +142,19 @@ class GNN_PyG(TorchModelV2, Module):
 
             # format graph to torch
             x = torch.stack([self.node_encoder(v) for v in x])
-            actor_edge_index = torch.tensor(actor_edge_index, dtype=torch.int64)
-            actor_edge_attr = torch.stack([self.edge_encoder(e) for e in actor_edge_attr]) if actor_edge_attr else torch.zeros((0, self.encoding_size), dtype=torch.float32)
-            fc_edge_index = torch.tensor(fc_edge_index, dtype=torch.int64)
-            fc_edge_attr = torch.stack([self.edge_encoder(e) for e in fc_edge_attr]) if fc_edge_attr else torch.zeros((0, self.encoding_size), dtype=torch.float32)
+            actor_edge_index = torch.tensor(actor_edge_index, dtype=torch.int64, device=self.device)
+            actor_edge_attr = torch.stack([self.edge_encoder(e) for e in actor_edge_attr]) if actor_edge_attr else torch.zeros((0, self.encoding_size), dtype=torch.float32, device=self.device)
+            fc_edge_index = torch.tensor(fc_edge_index, dtype=torch.int64, device=self.device)
+            fc_edge_attr = torch.stack([self.edge_encoder(e) for e in fc_edge_attr]) if fc_edge_attr else torch.zeros((0, self.encoding_size), dtype=torch.float32, device=self.device)
 
             actor_graphs.append(Data(x=x, edge_index=actor_edge_index, edge_attr=actor_edge_attr))
             fc_graphs.append(Data(x=x, edge_index=fc_edge_index, edge_attr=fc_edge_attr))
+
+        print(x.device)
+        print(actor_edge_index.device)
+        print(actor_edge_attr.device)
+        print(fc_edge_index.device)
+        print(fc_edge_attr.device)
 
         actor_dataloader = DataLoader(dataset=actor_graphs, batch_size=batch_size)
         critic_dataloader = DataLoader(dataset=fc_graphs, batch_size=batch_size)
