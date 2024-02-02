@@ -28,24 +28,41 @@ class Simple_model(mesa.Model):
                  policy_net: Algorithm = None, inference_mode: bool = False) -> None:
         super().__init__()
         
-        self.min_steps = config["model"]["min_steps"]
-        self.max_steps = config["model"]["max_steps"]
+        # workers
         self.n_workers = config["model"]["n_workers"]
-        self.n_agents = self.n_workers + 1
-        self.n_oracle_states = config["model"]["n_oracle_states"]
         self.n_hidden_states = config["model"]["n_hidden_state"]
         self.communication_range = config["model"]["communication_range"]
+        self.worker_placement = config["model"]["worker_placement"]
+        self.worker_init = config["model"]["worker_init"]
         self.reward_calculation = config["model"]["reward_calculation"]
+        self.n_agents = self.n_workers + 1
+        # oracle
+        self.n_oracle_states = config["model"]["n_oracle_states"]
+        self.p_oracle_change = config["model"]["p_oracle_change"]
+        # grid
+        self.grid_size = config["model"]["grid_size"]
+        self.grid_middle = floor(self.grid_size / 2)
+        # misc
+        self.episode_length = config["model"]["episode_length"]
         self.device = torch.device("cuda" if use_cuda else "cpu")
 
+        # tracking
+        self.ts_episode = 0
+        self.ts_curr_state = 0
+        self.state_switch_pause = floor(self.grid_middle / self.communication_range) + 1
+        self.n_state_switches = 1
+        self.reward_total = 0
+        self.reward_lower_bound = 0
+        self.reward_upper_bound = 0
+        
         # mesa setup
-        self.grid = mesa.space.MultiGrid(config["model"]["grid_width"], config["model"]["grid_height"], False)
+        self.grid = mesa.space.MultiGrid(self.grid_size, self.grid_size, False)
         self.schedule = mesa.time.BaseScheduler(self)
         self.current_id = 0
-        self.curr_step = 0
 
         # initialisation outputs of agents
         oracle_state = random.randint(0, self.n_oracle_states-1)
+        # @todo agent init random/ uniform
         r = random.randint(0, self.n_oracle_states-1)
         while r == oracle_state:
             r = random.randint(0, self.n_oracle_states-1)
@@ -53,19 +70,16 @@ class Simple_model(mesa.Model):
 
         # place agents
         self.oracle = Oracle(self._next_id(), self, state=oracle_state)
-        oracle_pos = (floor(config["model"]["grid_width"] / 2), floor(config["model"]["grid_height"] / 2))
+        oracle_pos = (self.grid_middle, self.grid_middle)
         self.grid.place_agent(agent=self.oracle, pos=oracle_pos)
         self.schedule.add(self.oracle)
         agent_positions = compute_agent_placement(self.n_workers, self.communication_range, 
-                                                  config["model"]["grid_width"], config["model"]["grid_height"], 
-                                                  oracle_pos, config["model"]["worker_placement"])
+                                                  self.grid_size, self.grid_size, 
+                                                  oracle_pos, self.worker_placement)
         for curr_pos in agent_positions:
             worker = Worker(self._next_id(), self, output=worker_output, n_hidden_states=self.n_hidden_states)
             self.grid.place_agent(agent=worker, pos=curr_pos)
             self.schedule.add(worker)
-
-        # tracking attributes
-        self.ts_to_convergence = -1
 
         # inference mode
         self.inference_mode = inference_mode
@@ -76,6 +90,29 @@ class Simple_model(mesa.Model):
         curr_id = self.current_id
         self.current_id += 1
         return curr_id
+    
+    def _compute_reward(self, n_wrongs: int) -> int:
+        """compute reward and adjust the reward bounds"""
+        assert self.reward_calculation in {"individual", "binary"}
+        REWARD = 10
+
+        # compute reward
+        if n_wrongs == 0:
+            reward = REWARD
+        elif self.reward_calculation == "individual":
+            reward = -n_wrongs
+        elif self.reward_calculation == "binary":
+            reward = -REWARD
+
+        # adjust reward bound
+        self.reward_upper_bound += REWARD
+        if self.reward_calculation == "individual":
+            self.reward_lower_bound += -self.n_workers
+        elif self.reward_calculation == "binary":
+            self.reward_lower_bound += -REWARD
+
+        self.reward_total += reward
+        return reward
     
     def get_action_space(self) -> gymnasium.spaces.Space:
         agent_actions = [
@@ -138,42 +175,54 @@ class Simple_model(mesa.Model):
                 actions = self.policy_net.compute_single_action(self.get_obs())
             else:
                 actions = self.get_action_space().sample()
-                print("prick")
         
-        # proceed simulation
+        # advance simulation
         for i, worker in enumerate(self.schedule.agents[1:]):
             assert type(worker) == Worker
             worker.output = actions[i][0]
             worker.hidden_state = actions[i][1]
-        self.curr_step += 1
+        self.ts_episode += 1
+        self.ts_curr_state += 1
         
         # compute reward and state
-        wrongs = sum([1 for a in self.schedule.agents if type(a) is Worker and a.output != self.oracle.state])
-        terminated = wrongs == 0 and self.curr_step >= self.min_steps
-        truncated = self.curr_step >= self.max_steps
-        if wrongs == 0:
-            reward = 10
-        else:
-            if self.reward_calculation == "binary":
-                reward = -10 
-            elif self.reward_calculation == "individual":
-                reward = -wrongs
-            else:
-                print(f"ERROR: unkown reward calculation {self.reward_calculation}")
-                quit()
+        n_wrongs = sum([1 for a in self.schedule.agents if type(a) is Worker and a.output != self.oracle.state])
+        reward = self._compute_reward(n_wrongs=n_wrongs)
+        truncated = self.ts_episode >= self.episode_length
+        terminated = False
+        self.running = not truncated
 
-        # track attributes
-        if wrongs == 0 and self.ts_to_convergence < 0:
-            self.ts_to_convergence = self.curr_step
+        # terminate or change to new oracle state
+        old_state = self.oracle.state
+        ts_old_state = self.ts_curr_state
+        if self.p_oracle_change > 0 and not truncated and \
+            ts_old_state >= self.state_switch_pause and self.ts_episode + self.state_switch_pause <= self.episode_length:
+            r = random.random()
+            if r <= self.p_oracle_change:
+                new_state = random.randint(0, self.n_oracle_states-1)
+                while new_state == self.oracle.state:
+                    new_state = random.randint(0, self.n_oracle_states-1)
+                self.oracle.state = new_state
+                self.n_state_switches += 1
+                self.ts_curr_state = 0
 
         # print overview
         if self.inference_mode:
-            print(f"step {self.curr_step}")
-            print(f"  oracle_state    = {self.oracle.state}")
-            print(f"  worker_outputs  = {[a.output for a in self.schedule.agents if type(a) is Worker]}")
-            print(f"  reward          = {reward}")
-            print(f"  terminated      = {terminated}")
-            
+            print()
+            print(f"------------- step {self.ts_episode}/{self.episode_length} ------------")
+            print(f"  states             = {old_state} - {[a.output for a in self.schedule.agents if type(a) is Worker]}")
+            print(f"  reward             = {reward}")
+            print(f"  converged          = {n_wrongs == 0}")
+            print(f"  truncated          = {truncated}")
+            print()
+            print(f"  next_state         = {'-' if old_state == self.oracle.state else {self.oracle.state}}")
+            print(f"  state_switch_pause = {ts_old_state}/{self.state_switch_pause}")
+            print(f"  n_state_switches   = {self.n_state_switches}")
+            print()
+            print(f"  reward_lower_bound = {self.reward_lower_bound}")
+            print(f"  reward_total       = {self.reward_total}")
+            print(f"  reward_upper_bound = {self.reward_upper_bound}")
+            print(f"  reward_percentile  = {(self.reward_total - self.reward_lower_bound) / (self.reward_upper_bound - self.reward_lower_bound)}")
+            print()
 
         return self.get_obs(), reward, terminated, truncated
 

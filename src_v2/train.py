@@ -1,10 +1,16 @@
 import os
-os.environ["WANDB__SERVICE_WAIT"] = "600"
-os.sched_setaffinity(0, range(os.cpu_count())) 
-print(f"-> cpu count: ", os.cpu_count())
-print(f"-> cpu affinity: ", os.sched_getaffinity(0))
-
+import platform
+import shutil
 import time
+
+if platform.system() == "Darwin":
+    pass
+else:
+    os.environ["WANDB__SERVICE_WAIT"] = "600"
+    os.sched_setaffinity(0, range(os.cpu_count())) 
+    print(f"-> cpu count: ", os.cpu_count())
+    print(f"-> cpu affinity: ", os.sched_getaffinity(0))
+
 import argparse
 import logging
 import ray
@@ -22,13 +28,14 @@ from callback import SimpleCallback
 from environment import Simple_env
 from pyg import GNN_PyG
 from utils import create_tunable_config, filter_tunables, read_yaml_config
-from stopper import MaxTimestepsStopper, RewardComboStopper, RewardMinStopper
+from stopper import MaxTimestepsStopper
+from curriculum import curriculum_oracle_switch
 
 # surpress excessive logging
 #wandb_logger = logging.getLogger("wandb")
 #wandb_logger.setLevel(logging.WARNING)
-wandbactor_logger = logging.getLogger("_WandbLoggingActor")
-wandbactor_logger.setLevel(logging.DEBUG)
+# wandbactor_logger = logging.getLogger("_WandbLoggingActor")
+# wandbactor_logger.setLevel(logging.DEBUG)
 
 
 # script
@@ -36,22 +43,24 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='script to setup hyperparameter tuning')
     parser.add_argument('--local',              action='store_true', help='execution location (default: False)')
     parser.add_argument('--num_ray_threads',    default=36, help='default processes for ray to use')
-    parser.add_argument('--num_cpu_for_local',  default=1, help='num cpus for local worker')
+    parser.add_argument('--num_cpu_for_local',  default=2, help='num cpus for local worker')
     parser.add_argument('--enable_gpu',         action='store_true', help='enable use of gpu')
     parser.add_argument('--env_config',         default=None, help="path to env config")
     parser.add_argument('--actor_config',       default=None, help="path to actor config")
     parser.add_argument('--critic_config',      default=None, help="path to critic config")
+    parser.add_argument('--restore',            default=None, help="restore experiment for tune")
     args = parser.parse_args()
 
     print("-> start tune with following parameters")
     print(args)
     use_cuda = args.enable_gpu and torch.cuda.is_available()
     storage_dir = "/Users/sega/Code/si_bees/log" if args.local else "/itet-stor/kpius/net_scratch/si_bees/log"
+    ray_dir = os.path.join(os.path.expanduser('~'), "ray_results")
 
     if args.local:
-        print(f"-> using autoscale")
-        ray.init()
-        #ray.init(num_cpus=1, local_mode=True)
+        print(f"-> using local")
+        #ray.init()
+        ray.init(num_cpus=1, local_mode=True)
     elif use_cuda:
         # @todo: investigate gpu utilisation
         print(f"-> using {int(args.num_ray_threads)} cpus and a gpu ({os.environ['CUDA_VISIBLE_DEVICES']})")
@@ -70,8 +79,13 @@ if __name__ == '__main__':
     pyg_config = dict()
     pyg_config["actor_config"] = filter_tunables(create_tunable_config(actor_config))
     pyg_config["critic_config"] = create_tunable_config(critic_config)
+    pyg_config["encoding_size"] = tune.choice([8, 16, 32])
     pyg_config["use_cuda"] = use_cuda
-    pyg_config["info"] = ""
+    pyg_config["info"] = {
+        "env_config": args.env_config,
+        "actor_config": args.actor_config,
+        "critic_config": args.critic_config
+    }
     model = {"custom_model": GNN_PyG,
              "custom_model_config": pyg_config}
     
@@ -80,28 +94,29 @@ if __name__ == '__main__':
     ppo_config.environment(
             env="Simple_env",
             env_config=env_config,
-            disable_env_checking=True)
+            disable_env_checking=True,
+            env_task_fn=curriculum_oracle_switch)
     # default values: https://github.com/ray-project/ray/blob/e6ae08f41674d2ac1423f3c2a4f8d8bd3500379a/rllib/agents/ppo/ppo.py
     ppo_config.training(
             model=model,
-            train_batch_size=tune.choice([256, 512, 2048]),
+            train_batch_size=500,
             shuffle_sequences=True,
-            lr=tune.uniform(5e-6, 0.003),
+            lr=tune.uniform(0.00003, 0.003),
             gamma=0.99,
             use_critic=True,
             use_gae=True,
             lambda_=tune.uniform(0.9, 1),
-            kl_coeff=tune.choice([0.0, 0.2, 0.4]),
+            kl_coeff=tune.choice([0.0, 0.2]),
             kl_target=tune.uniform(0.003, 0.03),
             vf_loss_coeff=tune.uniform(0.5, 1),
-            clip_param=tune.choice([0.1, 0.2, 0.3]),
+            clip_param=0.2,
             entropy_coeff=tune.choice([0.0, 0.01]),
             grad_clip=1,
             grad_clip_by="value",
             _enable_learner_api=False)
     ppo_config.rl_module(_enable_rl_module_api=False)
     ppo_config.callbacks(SimpleCallback)
-    ppo_config.reporting(keep_per_episode_custom_metrics=True)
+    #ppo_config.reporting(keep_per_episode_custom_metrics=True)
 
     # @todo: investigate gpu utilisation
     if use_cuda:
@@ -125,12 +140,12 @@ if __name__ == '__main__':
         storage_path=storage_dir,
         local_dir=storage_dir,
         stop=CombinedStopper(
-            MaxTimestepsStopper(max_timesteps=5000000),
+            MaxTimestepsStopper(max_timesteps=2500000),
         ),        
         checkpoint_config=CheckpointConfig(
-            checkpoint_score_attribute="episode_reward_mean",
-            num_to_keep=1,
-            checkpoint_frequency=10,
+            #checkpoint_score_attribute="custom_metrics/reward_score_mean",
+            #num_to_keep=1,
+            checkpoint_frequency=100,   # 500 ts per iteration, e.g. every 50'000 ts
             checkpoint_at_end=True),
         callbacks=[WandbLoggerCallback(
                             project="si_marl",
@@ -144,19 +159,40 @@ if __name__ == '__main__':
             num_samples=100000,
             scheduler= ASHAScheduler(
                 time_attr='timesteps_total',
-                metric='episode_reward_mean',
+                metric='custom_metrics/reward_score_mean',
                 mode='max',
                 grace_period=35000,
-                max_t=5000000,
+                max_t=2500000,
                 reduction_factor=2)
         )
 
-    tuner = tune.Tuner(
-        "PPO",
-        run_config=run_config,
-        tune_config=tune_config,
-        param_space=ppo_config.to_dict()
-    )
+    # restore experiments
+    if args.restore:
+        print(f"-> restoring experiment {args.restore}")
+        print(f"  tuner.pkl in {ray_dir}: {os.path.exists(os.path.join(ray_dir, args.restore, 'tuner.pkl'))}")
+        print(f"  tuner.pkl in {storage_dir}: {os.path.exists(os.path.join(storage_dir, args.restore, 'tuner.pkl'))}")
+        if os.path.exists(os.path.join(ray_dir, args.restore, "tuner.pkl")):
+            shutil.copy(os.path.join(ray_dir, args.restore, "tuner.pkl"), os.path.join(storage_dir, args.restore, "tuner.pkl"))
+            print("-> copied tuner.pkl from ~/ray")
+            time.sleep(30)
+
+        if os.path.exists(os.path.join(storage_dir, args.restore, "tuner.pkl")):
+            print(f"-> restore {args.restore}")
+            tuner = tune.Tuner.restore(
+                os.path.join(storage_dir, args.restore),
+                "PPO",
+                resume_unfinished=True,
+                param_space=ppo_config.to_dict()
+            )
+        else:
+            print(f"-> could not restore {args.restore}, no tuner.pkl file found")
+    else:
+        tuner = tune.Tuner(
+            "PPO",
+            run_config=run_config,
+            tune_config=tune_config,
+            param_space=ppo_config.to_dict()
+        )
 
     tuner.fit()
 

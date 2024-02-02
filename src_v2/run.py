@@ -1,4 +1,5 @@
 import argparse
+from math import floor
 import os
 import os
 from ray import tune
@@ -17,8 +18,15 @@ class GamestateTextElement(TextElement):
 
     def render(self, model):
         out = [
-            f"terminated   : {0 == -sum([1 for a in model.schedule.agents if type(a) is Worker and a.output != model.oracle.state])}",
-            f"states       : {model.oracle.state} {[a.output for a in model.schedule.agents if type(a) is Worker]}",
+            f"states                = {model.oracle.state} {[a.output for a in model.schedule.agents if type(a) is Worker]}",
+            f"",
+            f"reward_total          = {model.reward_total}",
+            f"reward_lower_bound    = {model.reward_lower_bound}",
+            f"reward_upper_bound    = {model.reward_upper_bound}",
+            f"reward_percentile     = {(model.reward_total - model.reward_lower_bound) / (model.reward_upper_bound - model.reward_lower_bound) if (model.reward_upper_bound - model.reward_lower_bound) != 0 else 0}",
+            f"",
+            f"state_switch_pause    = {model.ts_curr_state}/{model.state_switch_pause}",
+            f"n_state_switches      = {model.n_state_switches}",
         ]
         return "<h3>Status</h3>" + "<br />".join(out)
  
@@ -40,8 +48,8 @@ def create_server(model_checkpoint: str, env_config: str, task_level: int):
 
     canvas = CanvasGrid(
         agent_visualisation, 
-        grid_width=task_config["model"]["grid_width"], 
-        grid_height=task_config["model"]["grid_height"], 
+        grid_width=task_config["model"]["grid_size"], 
+        grid_height=task_config["model"]["grid_size"], 
         canvas_width=300,
         canvas_height=300)
     
@@ -62,15 +70,39 @@ def create_server(model_checkpoint: str, env_config: str, task_level: int):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="run script of the simulation")
 
-    parser.add_argument("--checkpoint",         default=None, help="folder name where checkpoints is stored")
-    parser.add_argument('--env_config',         default=None, help="path to env config")
-    parser.add_argument('--task_level',         default=0, help="task level of curriculum")
+    parser.add_argument("--run_dir",            default=None, help="directory name of run in checkpoints directory")
+    parser.add_argument('--checkpoint_nr',      default=-1,   help="number of checkpoint that shall be run, default newest")
+    parser.add_argument('--task_level',         default=0,    help="task level of curriculum")
+    parser.add_argument('--env_config',         default=None, help="manual set of env config")
     args = parser.parse_args()
 
-    checkpoint = os.path.join("checkpoints", args.checkpoint) if args.checkpoint else None
-    env_config = os.path.join("src_v2", "configs", args.env_config)
-    server = create_server(model_checkpoint=checkpoint, env_config=env_config, task_level=args.task_level)
+    run_dir = os.path.join("checkpoints", args.run_dir) if args.run_dir else None
+    if run_dir:
+        env_config = [d for d in os.listdir(run_dir) if "env_config" in d][0]
+        cps = [d for d in os.listdir(run_dir) if os.path.isdir(os.path.join(run_dir, d)) and "checkpoint" in d]
+        if int(args.checkpoint_nr) > 0:
+            options = [cp for cp in cps if args.checkpoint_nr in cp]
+            options.sort()
+            checkpoint = options[0]
+        else:
+            cps.sort()
+            checkpoint = cps[-1]
+
+    if args.env_config:
+        env_config = args.env_config
+
+    # final paths
+    checkpoint_path = os.path.join(run_dir, checkpoint)
+    config_path = os.path.join(run_dir, env_config)
     
+    print("\n\n=========== LAUNCH RUN =============")
+    print("checkpoint_path  = ", checkpoint_path)
+    print("config_path      = ", config_path)
+    print("task level       = ", args.task_level)
+    print("\n\n")
+
+    # launch
+    server = create_server(model_checkpoint=checkpoint_path, env_config=config_path, task_level=int(args.task_level))
     server.launch(open_browser=True)
 
  

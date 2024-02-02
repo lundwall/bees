@@ -21,7 +21,13 @@ class SimpleCallback(DefaultCallbacks):
         **kwargs
     ):
         env = base_env.get_sub_environments()[env_index]
-        episode.custom_metrics["ts_to_convergence"] = env.model.ts_to_convergence
+        model = env.model
+        episode.custom_metrics["reward_total"] = model.reward_total
+        episode.custom_metrics["reward_lower_bound"] = model.reward_lower_bound
+        episode.custom_metrics["reward_upper_bound"] = model.reward_upper_bound
+        episode.custom_metrics["n_state_switches"] = model.n_state_switches
+        episode.custom_metrics["reward_percentile"] = (model.reward_total - model.reward_lower_bound) / (model.reward_upper_bound - model.reward_lower_bound) if model.reward_upper_bound - model.reward_lower_bound != 0 else 0
+        episode.custom_metrics["reward_score"] = episode.custom_metrics["reward_percentile"] + int(env.get_task())
 
     def on_train_result(
         self,
@@ -30,16 +36,6 @@ class SimpleCallback(DefaultCallbacks):
         result: dict,
         **kwargs,
     ) -> None:
-        ts_to_convergence = result["custom_metrics"]["ts_to_convergence"]
-        total_results = len(ts_to_convergence)
-        converged_true = [a for a in ts_to_convergence if a >= 0]
-        converged_false = [a for a in ts_to_convergence if a < 0]
-
-        result["custom_metrics"]["ts_to_convergence_min"] = min(converged_true) if converged_true else 100
-        result["custom_metrics"]["ts_to_convergence_max"] = max(converged_true) if converged_true else 100
-        result["custom_metrics"]["ts_to_convergence_mean"] = mean(converged_true) if converged_true else 100
-        result["custom_metrics"]["convergence_ratio"] = len(converged_true) / total_results if len(converged_true) and total_results else 0
-        result["custom_metrics"]["n_converged_true"] = len(converged_true)
-        result["custom_metrics"]["n_converged_false"] = len(converged_false)
+        pass
 
 
