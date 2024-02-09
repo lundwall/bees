@@ -13,6 +13,7 @@ from agents import Oracle, Worker
 from utils import compute_agent_placement, get_relative_pos
 
 MAX_DISTANCE = 100
+GRAPH_HASH = 1000000
 
 TYPE_ORACLE = 0
 TYPE_PLATFORM = 1
@@ -20,19 +21,13 @@ TYPE_WORKER = 2
 
 MODEL_TYPE_SIMPLE = 0
 MODEL_TYPE_MOVING = 1
-SIMPLE_MODELS = ["env_config_0.yaml",
-                    "env_config_1.yaml",
-                    "env_config_2.yaml",
-                    "env_config_3.yaml",
-                    "env_config_4.yaml",
-                    "env_config_5.yaml",
-                    "env_config_6.yaml",
-                    "env_config_9.yaml",
-                    "env_config_11.yaml"]
-MOVING_MODELS = ["env_config_7.yaml",
-                 "env_config_8.yaml"]
+SIMPLE_MODELS = ["env_config_10.yaml",
+                    "env_config_11.yaml",
+                    "env_config_12.yaml",
+                ]
+MOVING_MODELS = []
 
-class Simple_model(mesa.Model):
+class Marl_model(mesa.Model):
     """
     the oracle outputs a number which the agents need to copy
     the visibility range is limited, so the agents need to communicate the oracle output
@@ -75,7 +70,8 @@ class Simple_model(mesa.Model):
         
         # mesa setup
         self.grid = mesa.space.MultiGrid(self.grid_size, self.grid_size, False)
-        self.schedule = mesa.time.BaseScheduler(self)
+        self.schedule_all = mesa.time.BaseScheduler(self)
+        self.schedule_workers = mesa.time.BaseScheduler(self)
         self.current_id = 0
 
         # initialisation outputs of agents
@@ -92,14 +88,15 @@ class Simple_model(mesa.Model):
         self.oracle = Oracle(self._next_id(), self, state=oracle_state)
         oracle_pos = (self.grid_middle, self.grid_middle)
         self.grid.place_agent(agent=self.oracle, pos=oracle_pos)
-        self.schedule.add(self.oracle)
+        self.schedule_all.add(self.oracle)
         agent_positions = compute_agent_placement(self.n_workers, self.communication_range, 
                                                   self.grid_size, self.grid_size, 
                                                   oracle_pos, self.worker_placement)
         for i, curr_pos in enumerate(agent_positions):
             worker = Worker(self._next_id(), self, output=worker_output[i], n_hidden_states=self.n_hidden_states)
             self.grid.place_agent(agent=worker, pos=curr_pos)
-            self.schedule.add(worker)
+            self.schedule_all.add(worker)
+            self.schedule_workers.add(worker)
 
         # inference mode
         self.inference_mode = inference_mode
@@ -112,27 +109,33 @@ class Simple_model(mesa.Model):
         return curr_id
     
     def _compute_reward(self) -> [int, int, int, int]:
-        assert self.reward_calculation in {"individual", "binary"}
+        assert self.reward_calculation in {"individual", "per-agent"}
 
         # compute reward
-        REWARD = 10
-        n_wrongs = sum([1 for a in self.schedule.agents if type(a) is Worker and a.output != self.oracle.state])
-        reward = REWARD if n_wrongs == 0 else -n_wrongs if self.reward_calculation == "individual" else -REWARD
-        upper = REWARD
-        lower = -self.n_workers if self.reward_calculation == "individual" else -REWARD
+        n_wrongs = sum([1 for a in self.schedule_workers.agents if a.output != self.oracle.state])
+        if self.reward_calculation == "individual":
+            rewards = [-n_wrongs if n_wrongs else self.n_workers for _ in range(self.n_workers)]
+            upper = self.n_workers * self.n_workers
+            lower = -self.n_workers * self.n_workers
+        elif self.reward_calculation == "per-agent":
+            rewards = [1 if a.output == self.oracle.state else -1 for a in self.schedule_workers.agents]
+            upper = self.n_workers
+            lower = -self.n_workers
 
-        return reward, upper, lower, n_wrongs
+        return rewards, upper, lower, n_wrongs
     
     def get_action_space(self) -> gymnasium.spaces.Space:
-        agent_actions = [
+        """action space per agent"""
+        return Tuple([
             Discrete(self.n_oracle_states),                             # output
             Box(0, 1, shape=(self.n_hidden_states,), dtype=np.float32), # hidden state
-        ]
-        return Tuple([Tuple(agent_actions) for _ in range(self.n_workers)])
+        ])
     
     def get_obs_space(self) -> gymnasium.spaces.Space:
         """ obs space consisting of all agent states + adjacents matrix with edge attributes """
+        graph_state = Box(0, GRAPH_HASH, shape=(1,), dtype=np.float32) # current step hash
         agent_state = [
+            Discrete(2),                                                # active flag
             Discrete(3),                                                # agent type
             Discrete(self.n_oracle_states),                             # current output
             Box(0, 1, shape=(self.n_hidden_states,), dtype=np.float32), # hidden state
@@ -145,86 +148,104 @@ class Simple_model(mesa.Model):
         ]
         edge_states = Tuple([Tuple(edge_state) for _ in range(self.n_agents * self.n_agents)])
 
-        return Tuple([agent_states, edge_states])
+        return Tuple([graph_state, agent_states, edge_states])
     
     def get_graph(self):
         """compute adjacency graph"""
         graph = nx.Graph()
-        for i, worker in enumerate(self.schedule.agents):
-            graph.add_node(i)
-        for i, worker in enumerate(self.schedule.agents):
+        for worker in self.schedule_all.agents:
+            graph.add_node(worker.unique_id)
+
+        for worker in self.schedule_all.agents:
             neighbors = self.grid.get_neighbors(worker.pos, moore=True, radius=self.communication_range, include_center=True)
             for n in neighbors:
-                graph.add_edge(i, n.unique_id)
+                graph.add_edge(worker.unique_id, n.unique_id)
         return graph
     
-    def get_obs(self) -> dict:
+    def get_obss(self) -> dict:
         """ collect and return current obs"""
+        step_hash = np.array([random.randint(0, GRAPH_HASH)])
+
+        # agent states
         agent_states = [None for _ in range(self.n_agents)]
-        for i, worker in enumerate(self.schedule.agents):
+        for worker in self.schedule_all.agents:
             if type(worker) is Oracle:
-                agent_states[i] = tuple([TYPE_ORACLE, 
+                agent_states[worker.unique_id] = tuple([0,
+                                         TYPE_ORACLE, 
                                          worker.state,
                                          np.zeros(self.n_hidden_states)])
             if type(worker) is Worker:
-                agent_states[i] = tuple([TYPE_WORKER, 
+                agent_states[worker.unique_id] = tuple([0,
+                                         TYPE_WORKER, 
                                          worker.output, 
                                          worker.hidden_state])
         # edge attributes
         edge_states = [None for _ in range(self.n_agents ** 2)]
-        for i, worker in enumerate(self.schedule.agents):
+        for worker in self.schedule_all.agents:
             # fully connected graph
-            for j, destination in enumerate(self.schedule.agents):
+            for destination in self.schedule_all.agents:
                 rel_pos = get_relative_pos(worker.pos, destination.pos)
-                edge_states[i * self.n_agents + j] = tuple([0, np.array(rel_pos, dtype=np.int32)])
+                edge_states[worker.unique_id * self.n_agents + destination.unique_id] = tuple([0, np.array(rel_pos, dtype=np.int32)])
 
             # visible graph
             neighbors = self.grid.get_neighbors(worker.pos, moore=True, radius=self.communication_range, include_center=True)
             for n in neighbors:
                 rel_pos = get_relative_pos(worker.pos, n.pos)
-                edge_states[i * self.n_agents + n.unique_id] = tuple([1, np.array(rel_pos, dtype=np.int32)]) 
+                edge_states[worker.unique_id * self.n_agents + n.unique_id] = tuple([1, np.array(rel_pos, dtype=np.int32)]) 
 
-        return tuple([tuple(agent_states), tuple(edge_states)])
+
+        # make obs_space for every agent, changing the live flag
+        obss = dict()
+        for worker in self.schedule_workers.agents:
+            curr_agent_state = agent_states.copy()
+            curr_agent_state[worker.unique_id] = tuple([1,
+                                         TYPE_WORKER, 
+                                         worker.output, 
+                                         worker.hidden_state])
+            obss[worker.unique_id] = tuple([step_hash, tuple(curr_agent_state), tuple(edge_states)])
+        return obss
 
 
     def step(self, actions=None) -> None:
         """advance the model one step in inference mode"""        
         # determine actions for inference mode
         if self.inference_mode:
+            actions = dict()
+            obss = self.get_obss()
+
+            # @todo: sample for every agent
             if self.policy_net:
-                actions = self.policy_net.compute_single_action(self.get_obs())
+                for worker in self.schedule_workers.agents:
+                    actions[worker.unique_id] = self.policy_net.compute_single_action(obss[worker.unique_id])
             else:
-                actions = self.get_action_space().sample()
-        
+                for worker in self.schedule_workers.agents:
+                    actions[worker.unique_id] = self.get_action_space().sample()
+
         # advance simulation
-        for i, worker in enumerate(self.schedule.agents[1:]):
-            assert type(worker) == Worker
-            worker.output = actions[i][0]
-            worker.hidden_state = actions[i][1]
-            if self.model_type == MODEL_TYPE_MOVING:
-                dx, dy = actions[i][2]
-                dx = -1 if dx <= -0.3 else 1 if dx >= 0.3 else 0
-                dy = -1 if dy <= -0.3 else 1 if dy >= 0.3 else 0
-                x = max(0, min(self.grid_size-1, worker.pos[0] + dx))
-                y = max(0, min(self.grid_size-1, worker.pos[1] + dy))
-                self.grid.move_agent(agent=worker, pos=(x,y))
+        for k, v in actions.items():
+            worker = [w for w in self.schedule_all.agents if w.unique_id == k][0]
+            worker.output = v[0]
+            worker.hidden_state = v[1]
         self.ts_episode += 1
         self.ts_curr_state += 1
+        self.running = self.ts_episode < self.episode_length
         
         # compute reward and state
-        reward, dupper, dlower, n_wrongs = self._compute_reward()
-        self.reward_total += reward
+        rewards, dupper, dlower, n_wrongs = self._compute_reward()
+        self.reward_total += sum(rewards)
         self.reward_upper_bound += dupper
         self.reward_lower_bound += dlower
 
-        truncated = self.ts_episode >= self.episode_length
-        terminated = False
-        self.running = not truncated
+        rewardss = {}
+        truncateds = {"__all__": self.ts_episode >= self.episode_length}
+        terminateds = {"__all__": False}
+        for worker in self.schedule_workers.agents:
+            rewardss[worker.unique_id] = rewards[worker.unique_id - 1]
 
         # terminate or change to new oracle state
         old_state = self.oracle.state
         ts_old_state = self.ts_curr_state
-        if self.p_oracle_change > 0 and not truncated and \
+        if self.p_oracle_change > 0 and self.running and \
             ts_old_state >= self.state_switch_pause and self.ts_episode + self.state_switch_pause <= self.episode_length:
             r = random.random()
             if r <= self.p_oracle_change:
@@ -239,10 +260,10 @@ class Simple_model(mesa.Model):
         if self.inference_mode:
             print()
             print(f"------------- step {self.ts_episode}/{self.episode_length} ------------")
-            print(f"  states             = {old_state} - {[a.output for a in self.schedule.agents if type(a) is Worker]}")
-            print(f"  reward             = {reward}")
+            print(f"  states             = {old_state} - {[a.output for a in self.schedule_workers.agents]}")
+            print(f"  rewards            = {rewards}")
             print(f"  converged          = {n_wrongs == 0}")
-            print(f"  truncated          = {truncated}")
+            print(f"  truncated          = {self.ts_episode >= self.episode_length}")
             print()
             print(f"  next_state         = {'-' if old_state == self.oracle.state else {self.oracle.state}}")
             print(f"  state_switch_pause = {ts_old_state}/{self.state_switch_pause}")
@@ -254,64 +275,6 @@ class Simple_model(mesa.Model):
             print(f"  reward_percentile  = {(self.reward_total - self.reward_lower_bound) / (self.reward_upper_bound - self.reward_lower_bound)}")
             print()
 
-        return self.get_obs(), reward, terminated, truncated
-    
+        return self.get_obss(), rewardss, terminateds, truncateds
 
-class Moving_model(Simple_model):
-    """
-    the oracle outputs a number which the agents need to copy
-    the visibility range is limited, so the agents need to communicate the oracle output
-    agents are capable of moving arounud on the field
-    reward: how many agents have the correct output + distance
-    """
-
-    def __init__(self, config: dict,
-                 use_cuda: bool = False,
-                 policy_net: Algorithm = None, inference_mode: bool = False) -> None:
-        super().__init__(config=config,
-                         model_type=MODEL_TYPE_MOVING, 
-                         use_cuda=use_cuda, 
-                         policy_net=policy_net, inference_mode=inference_mode)
-
-    def _compute_reward(self) -> [int, int, int, int]:
-        assert self.reward_calculation in {"distance", "connectivity-spread"}
-
-        # compute reward
-        n_wrongs = sum([1 for a in self.schedule.agents if type(a) is Worker and a.output != self.oracle.state])        
-        reward = 0
-        upper = 0
-        lower = -self.n_workers
-        if n_wrongs == 0:
-            if self.reward_calculation == "distance":
-                workers = [a for a in self.schedule.agents if type(a) is Worker]
-                for w in workers:
-                    dx, dy = get_relative_pos(w.pos, self.oracle.pos)
-                    reward += max(abs(dx), abs(dy))
-            elif self.reward_calculation == "connectivity-spread":
-                g = self.get_graph()
-                for i, agent in enumerate(self.schedule.agents):
-                    if type(agent) is Worker:
-                        dx, dy = get_relative_pos(agent.pos, self.oracle.pos)
-                        if nx.has_path(g, 0, i):
-                            reward += max(abs(dx), abs(dy))
-        else:
-            reward = -n_wrongs
-
-        # punish completely disconected components
-        if reward == 0:
-            reward = -1
-
-        # upper bound
-        for i in range(self.n_workers):
-            upper += min((i+1) * self.communication_range, self.grid_middle)
-
-        return reward, upper, lower, n_wrongs
-    
-    def get_action_space(self) -> gymnasium.spaces.Space:
-        agent_actions = [
-            Discrete(self.n_oracle_states),                             # output
-            Box(0, 1, shape=(self.n_hidden_states,), dtype=np.float32), # hidden state
-            Box(-1, 1, shape=(2,), dtype=np.float32),                   # movement x,y
-        ]
-        return Tuple([Tuple(agent_actions) for _ in range(self.n_workers)])
 

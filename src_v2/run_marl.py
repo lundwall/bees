@@ -10,6 +10,8 @@ from ray.rllib.algorithms.ppo import PPO
 from model import MODEL_TYPE_MOVING, MODEL_TYPE_SIMPLE, MOVING_MODELS, SIMPLE_MODELS, Moving_model, Simple_model
 from agents import Oracle, Worker
 from environment import Simple_env
+from model_marl import Marl_model
+from environment_marl import Marl_env
 from utils import read_yaml_config
 
 class GamestateTextElement(TextElement):
@@ -18,7 +20,7 @@ class GamestateTextElement(TextElement):
 
     def render(self, model):
         out = [
-            f"states                = {model.oracle.state} {[a.output for a in model.schedule.agents if type(a) is Worker]}",
+            f"states                = {model.oracle.state} {[a.output for a in model.schedule_workers.agents]}",
             f"",
             f"reward_total          = {model.reward_total}",
             f"reward_lower_bound    = {model.reward_lower_bound}",
@@ -44,11 +46,9 @@ def create_server(model_checkpoint: str, model_type: int, env_config: str, task_
     config = read_yaml_config(env_config)
     curriculum_configs = [config[task] for task in config]
     task_config = curriculum_configs[task_level]
-    model = Simple_model if model_type == MODEL_TYPE_SIMPLE \
-            else Moving_model if model_type == MODEL_TYPE_MOVING \
-            else None
+    model = Marl_model
 
-    tune.register_env("Simple_env", lambda _: Simple_env(config, model_type=model_type, initial_task_level=task_level))
+    tune.register_env("Marl_env", lambda _: Marl_env(config, model_type=model_type, initial_task_level=task_level))
 
     canvas = CanvasGrid(
         agent_visualisation, 
@@ -88,7 +88,6 @@ if __name__ == "__main__":
             options = [cp for cp in cps if args.checkpoint_nr in cp]
             options.sort()
             checkpoint = options[0]
-            print(f"found checkpoint {checkpoint}")
         else:
             cps.sort()
             checkpoint = cps[-1]

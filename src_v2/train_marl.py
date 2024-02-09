@@ -4,6 +4,7 @@ import shutil
 import time
 
 from model import MODEL_TYPE_SIMPLE, MODEL_TYPE_MOVING, MOVING_MODELS, SIMPLE_MODELS
+from environment_marl import Marl_env
 
 if platform.system() == "Darwin":
     pass
@@ -28,7 +29,7 @@ import torch
 
 from callback import SimpleCallback
 from environment import Simple_env
-from pyg import GNN_PyG
+from pyg_marl import GNN_PyG
 from utils import create_tunable_config, filter_tunables, read_yaml_config
 from stopper import MaxTimestepsStopper
 from curriculum import curriculum_oracle_switch
@@ -63,7 +64,7 @@ if __name__ == '__main__':
     if args.local:
         print(f"-> using local")
         #ray.init()
-        ray.init(num_cpus=1, local_mode=True)
+        ray.init(num_cpus=4, local_mode=False)
     elif use_cuda:
         # @todo: investigate gpu utilisation
         print(f"-> using {int(args.num_ray_threads)} cpus and a gpu ({os.environ['CUDA_VISIBLE_DEVICES']})")
@@ -77,9 +78,9 @@ if __name__ == '__main__':
             else MODEL_TYPE_MOVING if args.env_config in MOVING_MODELS \
             else None
 
-    tune.register_env("Simple_env", lambda env_config: Simple_env(env_config, model_type=model_type))
+    tune.register_env("Marl_env", lambda env_config: Marl_env(env_config, model_type=model_type))
     
-    run_name = f"simple-env-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    run_name = f"marl-env-{datetime.now().strftime('%Y%m-%d-%H-%M%S')}"
     env_config = read_yaml_config(os.path.join("src_v2", "configs", args.env_config))
     actor_config = read_yaml_config(os.path.join("src_v2", "configs", args.actor_config))
     critic_config = read_yaml_config(os.path.join("src_v2", "configs",args.critic_config))
@@ -101,7 +102,7 @@ if __name__ == '__main__':
     # ppo config
     ppo_config = PPOConfig()
     ppo_config.environment(
-            env="Simple_env",
+            env="Marl_env",
             env_config=env_config,
             disable_env_checking=True,
             env_task_fn=curriculum_oracle_switch)
@@ -109,7 +110,7 @@ if __name__ == '__main__':
     ppo_config.training(
             model=model,
             train_batch_size=500,
-            shuffle_sequences=True,
+            shuffle_sequences=False,
             lr=tune.uniform(0.00003, 0.003),
             gamma=0.99,
             use_critic=True,
@@ -118,13 +119,14 @@ if __name__ == '__main__':
             kl_coeff=tune.choice([0.0, 0.2]),
             kl_target=tune.uniform(0.003, 0.03),
             vf_loss_coeff=tune.uniform(0.5, 1),
-            clip_param=0.2,
-            entropy_coeff=tune.choice([0.0, 0.01]),
+            clip_param=tune.choice([0.1, 0.2]),
+            entropy_coeff=tune.choice([0.0, 0.01, 0.1]),
             grad_clip=1,
             grad_clip_by="value",
             _enable_learner_api=False)
     ppo_config.rl_module(_enable_rl_module_api=False)
     ppo_config.callbacks(SimpleCallback)
+    ppo_config.multi_agent(count_steps_by="agent_steps")
     #ppo_config.reporting(keep_per_episode_custom_metrics=True)
 
     # @todo: investigate gpu utilisation
@@ -138,7 +140,9 @@ if __name__ == '__main__':
                 #num_cpus_per_worker=1,
                 placement_strategy="PACK")
     else:
-        ppo_config.rollouts(num_rollout_workers=0)
+        ppo_config.rollouts(
+            num_rollout_workers=0,
+            batch_mode="complete_episodes")
         ppo_config.resources(
                 num_cpus_for_local_worker=int(args.num_cpu_for_local),
                 placement_strategy="PACK")

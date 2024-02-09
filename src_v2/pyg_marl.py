@@ -1,4 +1,5 @@
 from typing import Dict, List
+import numpy as np
 import torch
 from torch import TensorType
 from torch.nn import Module, Sequential
@@ -12,7 +13,7 @@ from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 from ray.rllib.models.torch.misc import SlimFC
 from gymnasium.spaces import Space
 from gymnasium.spaces.utils import flatdim
-from utils import build_graph_v2
+from utils import build_graph_v2, get_active_agents
 
 class GNN_PyG(TorchModelV2, Module):
     """
@@ -37,19 +38,28 @@ class GNN_PyG(TorchModelV2, Module):
         self.critic_is_fc = config["critic_config"]["model"] == "fc"
         self.device = torch.device("cuda:0" if config["use_cuda"] else "cpu")
 
+        # todo: remove fc critic
+        if self.critic_is_fc:
+            print("not supported anymore")
+            quit()
+
         # model dimensions
         og_obs_space = obs_space.original_space
         self.num_inputs = flatdim(og_obs_space)
-        self.num_agents = len(og_obs_space[0])
-        self.adj_matrix_size = len(og_obs_space[1])
-        self.node_state_size = flatdim(og_obs_space[0][0])
-        self.edge_state_size = flatdim(og_obs_space[1][0])
-        self.out_state_size = num_outputs // (self.num_agents - 1)
+        self.num_agents = len(og_obs_space[1])
+        self.adj_matrix_size = len(og_obs_space[2])
+        self.node_state_size = flatdim(og_obs_space[1][0])
+        self.edge_state_size = flatdim(og_obs_space[2][0])
+        self.out_state_size = num_outputs
 
         self.node_encoder = self.__build_fc(ins=self.node_state_size, outs=self.encoding_size, hiddens=[], activation=None)
         self.edge_encoder = self.__build_fc(ins=self.edge_state_size, outs=self.encoding_size, hiddens=[], activation=None)
-        self.decoder = self.__build_fc(ins=self.encoding_size + self.node_state_size if self.recurrent else self.encoding_size, 
+        self.action_decoder = self.__build_fc(ins=self.encoding_size + self.node_state_size if self.recurrent else self.encoding_size, 
                                        outs=self.out_state_size, 
+                                       hiddens=[], 
+                                       activation=None)
+        self.value_decoder = self.__build_fc(ins=self.encoding_size, 
+                                       outs=1, 
                                        hiddens=[], 
                                        activation=None)
         self.actor = self._build_model(config=actor_config, 
@@ -59,9 +69,9 @@ class GNN_PyG(TorchModelV2, Module):
                                        add_pooling=False)
         self.critic = self._build_model(config=critic_config, 
                                         ins=self.num_inputs if self.critic_is_fc else self.encoding_size, 
-                                        outs=1, 
+                                        outs=self.encoding_size, 
                                         edge_dim=self.encoding_size, 
-                                        add_pooling=True)
+                                        add_pooling=False)
         
         # put to correct device
         self.node_encoder.to(device=self.device)
@@ -139,19 +149,33 @@ class GNN_PyG(TorchModelV2, Module):
         """ 
         obss = input_dict["obs"]
         obss_flat = input_dict["obs_flat"]
-        agent_obss = obss[0]
-        edge_obss = obss[1]
+        graph_hashs = obss[0]
+        agent_obss = obss[1]
+        edge_obss = obss[2]
         batch_size = len(obss_flat)
 
         # iterate through the batch
         actor_graphs_old = list()
         actor_graphs = list()
         fc_graphs = list()
+        curr_graph_index = 0                                
+        hash_to_graph_index = {}
+        hash_details = {}                            
+        sample_to_node_index = get_active_agents(agent_obss)      # e.g. index of agent that created sample
         for i in range(batch_size):
+            # only add graph once to the dataset
+            if graph_hashs[i].item() in hash_to_graph_index.keys():
+                hash_details[graph_hashs[i].item()] += 1
+                continue
+            else:
+                hash_to_graph_index[graph_hashs[i].item()] = curr_graph_index
+                hash_details[graph_hashs[i].item()] = 1
+                curr_graph_index += 1
+
             x, actor_edge_index, actor_edge_attr, fc_edge_index, fc_edge_attr = build_graph_v2(self.num_agents, agent_obss, edge_obss, i) 
 
-            # format graph to torch
-            x_old = torch.stack([v for v in x])
+            # format graph to torch and apply encoding
+            x_old = torch.clone(torch.stack([v for v in x]))
             x = torch.stack([self.node_encoder(v) for v in x])
             actor_edge_index = torch.tensor(actor_edge_index, dtype=torch.int64, device=self.device)
             actor_edge_attr = torch.stack([self.edge_encoder(e) for e in actor_edge_attr]) if actor_edge_attr else torch.zeros((0, self.encoding_size), dtype=torch.float32, device=self.device)
@@ -162,7 +186,7 @@ class GNN_PyG(TorchModelV2, Module):
             actor_graphs.append(Data(x=x, edge_index=actor_edge_index, edge_attr=actor_edge_attr))
             fc_graphs.append(Data(x=x, edge_index=fc_edge_index, edge_attr=fc_edge_attr))
             
-
+        # create superbatch
         actor_old_dataloader = DataLoader(dataset=actor_graphs_old, batch_size=batch_size)
         actor_dataloader = DataLoader(dataset=actor_graphs, batch_size=batch_size)
         critic_dataloader = DataLoader(dataset=fc_graphs, batch_size=batch_size)
@@ -172,32 +196,53 @@ class GNN_PyG(TorchModelV2, Module):
         assert torch.all(actor_batch.batch.eq(actor_old_batch.batch))
         assert torch.all(actor_batch.batch.eq(critic_batch.batch))
 
-        hidden_state = self.actor(x=actor_batch.x, edge_index=actor_batch.edge_index, edge_attr=actor_batch.edge_attr, batch=actor_batch.batch)
-
+        h_all_action = self.actor(x=actor_batch.x, edge_index=actor_batch.edge_index, edge_attr=actor_batch.edge_attr, batch=actor_batch.batch)
         if self.recurrent:
-            actions = self.decoder(torch.cat([hidden_state, actor_old_batch.x], dim=1))
+            all_action = self.action_decoder(torch.cat([h_all_action, actor_old_batch.x], dim=1))
         else:
-            actions = self.decoder(hidden_state)
+            all_action = self.action_decoder(h_all_action)
+
+        h_critic = self.critic(x=critic_batch.x, edge_index=critic_batch.edge_index, edge_attr=critic_batch.edge_attr, batch=critic_batch.batch)
+        all_values = self.value_decoder(h_critic)
         
-        if self.critic_is_fc:
-            values = self.critic(obss_flat)
-        else:
-            values = self.critic(x=critic_batch.x, edge_index=critic_batch.edge_index, edge_attr=critic_batch.edge_attr, batch=critic_batch.batch)
-        
-        # which nodes belong to which batch
+        # which nodes belong to which batch (graph)
         curr_batch = 0
-        node_to_sample_mapping = [0]
+        node_to_batch_mapping = [0]
         for i, b in enumerate(actor_batch.batch):
             if curr_batch != b:
                 curr_batch += 1
-                node_to_sample_mapping.append(i)
-        node_to_sample_mapping.append(len(actions))
+                node_to_batch_mapping.append(i)
+        node_to_batch_mapping.append(len(all_action))
 
-        # create actions output for batch
-        actions_batch = list()
-        for s_i in range(len(node_to_sample_mapping) - 1):
-            curr_actions = actions[node_to_sample_mapping[s_i]:node_to_sample_mapping[s_i+1]]
-            actions_batch.append(torch.flatten(curr_actions[1:]))
+        # create all_action output for batch
+        actions_per_batch = list()
+        values_per_batch = list()
+        for s_i in range(len(node_to_batch_mapping) - 1):
+            actions_per_batch.append(all_action[node_to_batch_mapping[s_i]:node_to_batch_mapping[s_i+1]])
+            values_per_batch.append(all_values[node_to_batch_mapping[s_i]:node_to_batch_mapping[s_i+1]])
+        
+        # print(f"batch_size: {batch_size}")
+        # print(f"h_all_action output: {h_all_action.shape}")
+        # print(f"h_critic output: {h_critic.shape}")
+        # print(f"all_action output: {all_action.shape}")
+        # print(f"all_values output: {all_values.shape}")
+        # print(f"hash to graph: {hash_to_graph_index}")
+        # print(f"sample to node: {sample_to_node_index}")
+        # print(f"num graphs: {len(hash_to_graph_index)}: {sum([1 for k in hash_details.keys() if hash_details[k] == 4])}/{sum([1 for k in hash_details.keys() if hash_details[k] == 3])}/{sum([1 for k in hash_details.keys() if hash_details[k] == 2])}/{sum([1 for k in hash_details.keys() if hash_details[k] == 1])}")
 
-        self.last_values = values
-        return torch.stack(actions_batch), state
+        # return 0 if it is initialisation run
+        if not sample_to_node_index:
+            actions = torch.stack([actions_per_batch[0][0] for _ in range(batch_size)])
+            self.last_values = torch.stack([torch.tensor(np.zeros(1)) for _ in range(batch_size)])
+            return actions, state
+        else:
+            actions = list()
+            values = list()
+            for i in range(batch_size):
+                batch_nr = hash_to_graph_index[graph_hashs[i].item()]
+                actions_of_batch = actions_per_batch[batch_nr]
+                values_of_batch = values_per_batch[batch_nr]
+                actions.append(actions_of_batch[sample_to_node_index[i]])
+                values.append(values_of_batch[sample_to_node_index[i]])
+            self.last_values = torch.stack(values)
+            return torch.stack(actions), state
