@@ -233,7 +233,7 @@ class GNN_PyG(TorchModelV2, Module):
         # return 0 if it is initialisation run
         if not sample_to_node_index:
             actions = torch.stack([actions_per_batch[0][0] for _ in range(batch_size)])
-            self.last_values = torch.stack([torch.tensor(np.zeros(1)) for _ in range(batch_size)])
+            self.last_values = torch.stack([torch.tensor(np.zeros(1), device=self.device) for _ in range(batch_size)])
             return actions, state
         else:
             actions = list()
