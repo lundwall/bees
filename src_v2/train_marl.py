@@ -47,7 +47,9 @@ if __name__ == '__main__':
     parser.add_argument('--local',              action='store_true', help='execution location (default: False)')
     parser.add_argument('--num_ray_threads',    default=36, help='default processes for ray to use')
     parser.add_argument('--num_cpu_for_local',  default=2, help='num cpus for local worker')
+    parser.add_argument('--num_rollouts',       default=0, help='num rollout workers')
     parser.add_argument('--enable_gpu',         action='store_true', help='enable use of gpu')
+    parser.add_argument('--num_gpu_shares',     default=1, help='in how many parts the GPU is split')
     parser.add_argument('--env_config',         default=None, help="path to env config")
     parser.add_argument('--actor_config',       default=None, help="path to actor config")
     parser.add_argument('--critic_config',      default=None, help="path to critic config")
@@ -131,9 +133,11 @@ if __name__ == '__main__':
 
     # @todo: investigate gpu utilisation
     if use_cuda:
-        ppo_config.rollouts(num_rollout_workers=0)
+        ppo_config.rollouts(
+            num_rollout_workers=int(args.num_rollouts),
+            batch_mode="complete_episodes")
         ppo_config.resources(
-                num_gpus=0.2,
+                num_gpus=1.0 / int(args.num_gpu_shares),
                 #num_cpus_for_local_worker=2,
                 #num_learner_workers=0,
                 #num_gpus_per_learner_worker=1,
@@ -141,7 +145,7 @@ if __name__ == '__main__':
                 placement_strategy="PACK")
     else:
         ppo_config.rollouts(
-            num_rollout_workers=0,
+            num_rollout_workers=int(args.num_rollouts),
             batch_mode="complete_episodes")
         ppo_config.resources(
                 num_cpus_for_local_worker=int(args.num_cpu_for_local),
