@@ -25,18 +25,20 @@ def get_model_by_config(config: str):
                     "env_config_10.yaml",
                     "env_config_11.yaml",
                     "env_config_12.yaml",
-                ]:
-        return Marl_model
+                ]: return Marl_model
     elif config in [
                     "env_config_13.yaml",
-                ]:
-        return Relstate_Model
+                ]: return Relstate_Model
     elif config in [
                     "env_config_14.yaml",
                     "env_config_15.yaml",
                     "env_config_16.yaml",
-                ]:
-        return Moving_Discrete_model
+                ]: return Moving_Discrete_model
+    elif config in [
+                    "env_config_17.yaml",
+                    "env_config_18.yaml",
+                    "env_config_19.yaml",
+                ]: return Moving_History_model
 
 class Marl_model(mesa.Model):
     """
@@ -423,3 +425,66 @@ class Moving_Discrete_model(Marl_model):
             upper = self.n_workers
             
         return rewardss, upper, lower, n_wrongs
+
+class Moving_History_model(Moving_Discrete_model):
+
+    def __init__(self, config: dict, use_cuda: bool = False, policy_net: Algorithm = None, inference_mode: bool = False) -> None:
+        super().__init__(config, use_cuda, policy_net, inference_mode)
+        self.history_length = 3
+        self.history = {w.unique_id: [[np.array(get_relative_pos(w.pos, self.oracle.pos)), np.array([0,0])] for _ in range(self.history_length)] 
+                        for w in self.schedule_all.agents}
+    
+    def _get_agent_state_space(self) -> gymnasium.spaces.Space:
+        return Tuple([
+            Discrete(2),                                                    # active flag
+            Discrete(3),                                                    # agent type
+            Discrete(self.n_oracle_states),                                 # current output
+            Box(0, 1, shape=(self.n_hidden_states,), dtype=np.float32),     # hidden state
+            Box(-MAX_DISTANCE, MAX_DISTANCE, shape=(2,), dtype=np.float32), # relative position to oracle
+            Box(-MAX_DISTANCE, MAX_DISTANCE, shape=(2,), dtype=np.float32), # t-1 position to oracle
+            Box(-1, 1, shape=(2,), dtype=np.int32),                         # t-1 action
+            Box(-MAX_DISTANCE, MAX_DISTANCE, shape=(2,), dtype=np.float32), # t-2 position to oracle
+            Box(-1, 1, shape=(2,), dtype=np.int32),                         # t-2 action
+            Box(-MAX_DISTANCE, MAX_DISTANCE, shape=(2,), dtype=np.float32), # t-3 position to oracle
+            Box(-1, 1, shape=(2,), dtype=np.int32),                         # t-3 action
+        ])
+    
+    def _apply_action(self, agent: BaseAgent, action):
+        # update history
+        h = self.history[agent.unique_id]
+        h.insert(0, [np.array(get_relative_pos(agent.pos, self.oracle.pos)), action[2]])
+        if len(h) > self.history_length: h.pop()
+        
+        # apply action
+        super()._apply_action(agent=agent, action=action)
+
+    
+    def _get_agent_state(self, agent: BaseAgent, activity_status: int):
+        """compute agent state"""
+        flat_h = list()
+        for ht in self.history[agent.unique_id]:
+            pos, a = ht
+            flat_h.append(pos)
+            flat_h.append(a)
+        return tuple([
+            activity_status,
+            TYPE_ORACLE if type(agent) is Oracle else TYPE_WORKER, 
+            agent.output,
+            agent.hidden_state,
+            np.array(get_relative_pos(agent.pos, self.oracle.pos))]
+            + flat_h)
+
+    def _print_model_specific(self):
+            print("positional history")
+            print("------------------")
+            hist = [[] for _ in range(4)]
+            for agent in self.schedule_workers.agents:
+                for j, h in enumerate(self.history[agent.unique_id]):
+                    hist[j].append(str(h[0]) + " " + str(h[1]))
+            
+            print("\t\t\t".join(["agent " + str(w.unique_id) for w in self.schedule_workers.agents]))
+            print("\t\t".join(["pos|action " for _ in self.schedule_workers.agents]))
+            for ht in hist:
+                print("\t\t".join(ht))
+            
+            print()
