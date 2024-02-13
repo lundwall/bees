@@ -34,8 +34,9 @@ def get_model_by_config(config: str):
     elif config in [
                     "env_config_14.yaml",
                     "env_config_15.yaml",
+                    "env_config_16.yaml",
                 ]:
-        return Moving_model
+        return Moving_Discrete_model
 
 class Marl_model(mesa.Model):
     """
@@ -347,13 +348,14 @@ class Relstate_Model(Marl_model):
             for destination in neighbors:
                 print(f"    edge {worker.unique_id}->{destination.unique_id}: {self._get_edge_state(from_agent=worker, to_agent=destination, visible_edge=1)}")
         print()
-        
-class Moving_model(Relstate_Model):
+
+
+class Moving_Discrete_model(Marl_model):
     def get_action_space(self) -> gymnasium.spaces.Space:
         return Tuple([
             Discrete(self.n_oracle_states),                             # output
             Box(0, 1, shape=(self.n_hidden_states,), dtype=np.float32), # hidden state
-            Box(-1, 1, shape=(2,), dtype=np.float32),                   # movement x,y
+            Box(-1, 1, shape=(2,), dtype=np.int32),                   # movement x,y
         ]) 
     
     def _apply_action(self, agent: BaseAgent, action):
@@ -367,7 +369,7 @@ class Moving_model(Relstate_Model):
         self.grid.move_agent(agent=agent, pos=(x,y))
 
     def _compute_reward(self):
-        assert self.reward_calculation in {"spread", "spread-connected"}
+        assert self.reward_calculation in {"spread", "spread-connected", "2-neighbours"}
 
         # compute reward
         rewardss = {}
@@ -377,16 +379,47 @@ class Moving_model(Relstate_Model):
                 dx, dy = get_relative_pos(worker.pos, self.oracle.pos)
                 rewardss[worker.unique_id] = max(abs(dx), abs(dy)) if worker.output == self.oracle.output else -1
             
+            lower = -self.n_workers
+            upper = 0
+            for i in range(self.n_workers):
+                upper += min((i+1) * self.communication_range, self.grid_middle)
+            
         elif self.reward_calculation == "spread-connected":
             g = self.get_graph()
             for worker in self.schedule_workers.agents:
                 dx, dy = get_relative_pos(worker.pos, self.oracle.pos)
-                rewardss[worker.unique_id] = max(abs(dx), abs(dy)) if worker.output == self.oracle.output and nx.has_path(g, self.oracle.unique_id, worker.unique_id) else -1
+                if worker.output == self.oracle.output:
+                    rewardss[worker.unique_id] = max(abs(dx), abs(dy)) * (1 if nx.has_path(g, self.oracle.unique_id, worker.unique_id) else 0.5)
+                else:
+                    rewardss[worker.unique_id] = -1 * (0.5 if nx.has_path(g, self.oracle.unique_id, worker.unique_id) else 1)
 
-        lower = -self.n_workers
-        upper = 0
-        for i in range(self.n_workers):
-            upper += min((i+1) * self.communication_range, self.grid_middle)
+            lower = -self.n_workers
+            upper = 0
+            for i in range(self.n_workers):
+                upper += min((i+1) * self.communication_range, self.grid_middle)
+
+        elif self.reward_calculation == "2-neighbours":
+            for worker in self.schedule_workers.agents:
+                neighbors = self.grid.get_neighbors(worker.pos, moore=True, radius=self.communication_range, include_center=True)
+                neighbors = [n for n in neighbors if n != worker]
+
+                if worker.output == self.oracle.output:
+                    if 0 < len(neighbors) < 3:
+                        reward = 1
+                    elif len(neighbors) >= 3:
+                        reward = 0.5
+                    else:
+                        reward = 0.1
+                else:
+                    if 0 < len(neighbors) < 3:
+                        reward = -0.2
+                    elif len(neighbors) >= 3:
+                        reward = -0.5
+                    else:
+                        reward = -1
+                rewardss[worker.unique_id] = reward
             
-
+            lower = -self.n_workers
+            upper = self.n_workers
+            
         return rewardss, upper, lower, n_wrongs
