@@ -59,7 +59,7 @@ while [[ $# -gt 0 ]]; do
         CP_PATH=$2
         shift 2
       else
-        echo "Error: Missing value for -env_config flag."
+        echo "Error: Missing value for -cp_path flag."
         exit 1
       fi
       ;;
