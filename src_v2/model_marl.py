@@ -476,7 +476,8 @@ class Moving_History_model(Moving_Discrete_model):
         return Tuple([
             Discrete(2),                                                    # active flag
             Discrete(3),                                                    # agent type
-            Discrete(self.n_oracle_states)]                                 # current output
+            Discrete(self.n_oracle_states),                                 # current output
+            Box(0, 1, shape=(self.n_hidden_states,), dtype=np.float32)]     # hidden state                               
             + history)
     
     def _apply_action(self, agent: BaseAgent, action):
