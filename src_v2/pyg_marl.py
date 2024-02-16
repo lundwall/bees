@@ -8,6 +8,7 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.nn.conv.gin_conv import GINEConv
 from torch_geometric.nn.conv.gat_conv import GATConv
 from torch_geometric.nn.conv.gatv2_conv import GATv2Conv
+from torch_geometric.nn.conv.transformer_conv import TransformerConv
 from torch_geometric.nn import Sequential as PyG_Sequential, global_mean_pool
 from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 from ray.rllib.models.torch.misc import SlimFC
@@ -111,6 +112,8 @@ class GNN_PyG(TorchModelV2, Module):
             return GATv2Conv(ins, outs, edge_dim=edge_dim, dropout=config["dropout"])
         elif config["model"] == "GINEConv":
             return GINEConv(self.__build_fc(ins, outs, [config["hidden_mlp_size"] for _ in range(config["n_hidden_mlp"])]))
+        elif config["model"] == "TransformerConv":
+            return TransformerConv(ins, outs, edge_dim=edge_dim, dropout=config["dropout"])
         else:
             raise NotImplementedError(f"unknown model {config['model']}")  
         
