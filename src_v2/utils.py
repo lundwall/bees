@@ -116,7 +116,7 @@ def get_active_agents(agent_obss: Tuple) -> int:
     return mapping
 
 def compute_agent_placement(num_workers: int, communication_range: int,
-                            grid_w: int, grid_h: int, 
+                            grid_size: int, 
                             oracle_pos: tuple, placement_strategy: str):
     agent_positions = list()
     direction_vector = random.choice([[1,0], [-1,0], [0,1], [0,-1]])
@@ -135,6 +135,15 @@ def compute_agent_placement(num_workers: int, communication_range: int,
                     curr_pos = x_old + random.randint(-communication_range+1, communication_range-1), y_old + direction_vector[1] * random.randint(1, max(1, communication_range - 1))
 
             agent_positions.append(curr_pos)
+    
+    # check that all agents are in bounds
+    for i, (x, y) in enumerate(agent_positions):
+        # x_new = x - grid_size if x > grid_size else x
+        # y_new = y - grid_size if y > grid_size else y
+        # agent_positions[i] = (x_new, y_new)
+        middle = grid_size / 2
+        if x >= grid_size or x < 0 or y >= grid_size or y < 0:
+            agent_positions[i] = (random.randint(max(middle - 5, 0), min(middle + 5, grid_size-1)), random.randint(max(middle - 5, 0), min(middle + 5, grid_size-1)))
 
     return agent_positions
             

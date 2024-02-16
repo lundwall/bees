@@ -38,6 +38,7 @@ def get_model_by_config(config: str):
                     "env_config_17.yaml",
                     "env_config_18.yaml",
                     "env_config_19.yaml",
+                    "env_config_20.yaml",
                 ]: return Moving_History_model
 
 class Marl_model(mesa.Model):
@@ -104,7 +105,7 @@ class Marl_model(mesa.Model):
         self.grid.place_agent(agent=self.oracle, pos=oracle_pos)
         self.schedule_all.add(self.oracle)
         agent_positions = compute_agent_placement(self.n_workers, self.communication_range, 
-                                                  self.grid_size, self.grid_size, 
+                                                  self.grid_size, 
                                                   oracle_pos, self.worker_placement)
         for i, curr_pos in enumerate(agent_positions):
             worker = Worker(unique_id=self._next_id(), 
@@ -370,7 +371,7 @@ class Moving_Discrete_model(Marl_model):
         self.grid.move_agent(agent=agent, pos=(x,y))
 
     def _compute_reward(self):
-        assert self.reward_calculation in {"spread", "spread-connected", "2-neighbours"}
+        assert self.reward_calculation in {"spread", "spread-connected", "2-neighbours", "scn2"}
 
         # compute reward
         rewardss = {}
@@ -422,6 +423,39 @@ class Moving_Discrete_model(Marl_model):
             
             lower = -self.n_workers
             upper = self.n_workers
+        elif self.reward_calculation == "scn2":
+            f_neighbours = None
+            f_connected = None
+            spread = None
+            for worker in self.schedule_workers.agents:
+                dx, dy = get_relative_pos(worker.pos, self.oracle.pos)
+
+                # find neighbours factor
+                neighbors = self.grid.get_neighbors(worker.pos, moore=True, radius=self.communication_range, include_center=True)
+                neighbors = [n for n in neighbors if n != worker]
+                if 0 < len(neighbors) < 3:
+                    f_neighbours = 1
+                elif len(neighbors) >= 3:
+                    f_neighbours = 0.5
+                else:
+                    f_neighbours = 0.2
+                # find connected factor
+                g = self.get_graph()
+                f_connected = 1 if nx.has_path(g, self.oracle.unique_id, worker.unique_id) else 0.5
+                # spread
+                spread = max(abs(dx), abs(dy))
+
+                # reward
+                if worker.output == self.oracle.output:
+                    reward = f_neighbours * f_connected * spread
+                else:
+                    reward = 0.2/f_neighbours * 0.5/f_connected * -1
+                rewardss[worker.unique_id] = reward
+            lower = -self.n_workers
+            upper = 0
+            for i in range(self.n_workers):
+                upper += min((i+1) * self.communication_range, self.grid_middle)
+
             
         return rewardss, upper, lower, n_wrongs
 
