@@ -142,7 +142,7 @@ class GNN_PyG(TorchModelV2, Module):
     def value_function(self):
         return torch.reshape(self.last_values, [-1])
     
-    def forward(self, input_dict: Dict[str, TensorType], state: List[TensorType], seq_lens: TensorType) -> (TensorType, List[TensorType]):
+    def forward(self, input_dict: Dict[str, TensorType], state: List[TensorType], seq_lens: TensorType):
         """
         extract the node info from the flat observation to create an X tensor
         extract the adjacency relations to create the edge_indexes
