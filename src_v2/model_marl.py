@@ -252,7 +252,6 @@ class Marl_model(mesa.Model):
             actions = dict()
             obss = self.get_obss()
 
-            # @todo: sample for every agent
             if self.policy_net:
                 for worker in self.schedule_workers.agents:
                     actions[worker.unique_id] = self.policy_net.compute_single_action(obss[worker.unique_id])
@@ -435,19 +434,16 @@ class Moving_History_model(Moving_Discrete_model):
                         for w in self.schedule_all.agents}
     
     def _get_agent_state_space(self) -> gymnasium.spaces.Space:
+        history = [Box(-MAX_DISTANCE, MAX_DISTANCE, shape=(2,), dtype=np.float32)]
+        for _ in range(self.history_length):
+            history.append(Box(-MAX_DISTANCE, MAX_DISTANCE, shape=(2,), dtype=np.float32))
+            history.append(Box(-1, 1, shape=(2,), dtype=np.int32))
+
         return Tuple([
             Discrete(2),                                                    # active flag
             Discrete(3),                                                    # agent type
-            Discrete(self.n_oracle_states),                                 # current output
-            Box(0, 1, shape=(self.n_hidden_states,), dtype=np.float32),     # hidden state
-            Box(-MAX_DISTANCE, MAX_DISTANCE, shape=(2,), dtype=np.float32), # relative position to oracle
-            Box(-MAX_DISTANCE, MAX_DISTANCE, shape=(2,), dtype=np.float32), # t-1 position to oracle
-            Box(-1, 1, shape=(2,), dtype=np.int32),                         # t-1 action
-            Box(-MAX_DISTANCE, MAX_DISTANCE, shape=(2,), dtype=np.float32), # t-2 position to oracle
-            Box(-1, 1, shape=(2,), dtype=np.int32),                         # t-2 action
-            Box(-MAX_DISTANCE, MAX_DISTANCE, shape=(2,), dtype=np.float32), # t-3 position to oracle
-            Box(-1, 1, shape=(2,), dtype=np.int32),                         # t-3 action
-        ])
+            Discrete(self.n_oracle_states)]                                 # current output
+            + history)
     
     def _apply_action(self, agent: BaseAgent, action):
         # update history
@@ -461,18 +457,17 @@ class Moving_History_model(Moving_Discrete_model):
     
     def _get_agent_state(self, agent: BaseAgent, activity_status: int):
         """compute agent state"""
-        flat_h = list()
+        history = [np.array(get_relative_pos(agent.pos, self.oracle.pos))]
         for ht in self.history[agent.unique_id]:
             pos, a = ht
-            flat_h.append(pos)
-            flat_h.append(a)
+            history.append(pos)
+            history.append(a)
         return tuple([
             activity_status,
             TYPE_ORACLE if type(agent) is Oracle else TYPE_WORKER, 
             agent.output,
-            agent.hidden_state,
-            np.array(get_relative_pos(agent.pos, self.oracle.pos))]
-            + flat_h)
+            agent.hidden_state]
+            + history)
 
     def _print_model_specific(self):
             print("positional history")
