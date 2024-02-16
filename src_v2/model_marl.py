@@ -39,6 +39,8 @@ def get_model_by_config(config: str):
                     "env_config_18.yaml",
                     "env_config_19.yaml",
                     "env_config_20.yaml",
+                    "env_config_21.yaml",
+                    "env_config_22.yaml",
                 ]: return Moving_History_model
 
 class Marl_model(mesa.Model):
