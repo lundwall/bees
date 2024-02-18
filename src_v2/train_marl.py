@@ -53,6 +53,7 @@ if __name__ == '__main__':
     parser.add_argument('--env_config',         default=None, help="path to env config")
     parser.add_argument('--actor_config',       default=None, help="path to actor config")
     parser.add_argument('--critic_config',      default=None, help="path to critic config")
+    parser.add_argument('--encoding_config',    default=None, help="path to encoding config")
     parser.add_argument('--restore',            default=None, help="restore experiment for tune")
     args = parser.parse_args()
 
@@ -79,18 +80,20 @@ if __name__ == '__main__':
     run_name = f"marl-env-{datetime.now().strftime('%Y%m-%d-%H-%M%S')}"
     env_config = read_yaml_config(os.path.join("src_v2", "configs", args.env_config))
     actor_config = read_yaml_config(os.path.join("src_v2", "configs", args.actor_config))
-    critic_config = read_yaml_config(os.path.join("src_v2", "configs",args.critic_config))
+    critic_config = read_yaml_config(os.path.join("src_v2", "configs", args.critic_config))
+    encoding_config = read_yaml_config(os.path.join("src_v2", "configs", args.encoding_config))
 
     pyg_config = dict()
     pyg_config["actor_config"] = filter_tunables(create_tunable_config(actor_config))
     pyg_config["critic_config"] = create_tunable_config(critic_config)
-    pyg_config["encoding_size"] = tune.choice([8, 16, 32])
+    pyg_config["encoding_config"] = create_tunable_config(encoding_config)
     pyg_config["recurrent"] = tune.choice([1, 0])
     pyg_config["use_cuda"] = use_cuda
     pyg_config["info"] = {
         "env_config": args.env_config,
         "actor_config": args.actor_config,
-        "critic_config": args.critic_config
+        "critic_config": args.critic_config,
+        "encoding_config": args.encoding_config
     }
     model = {"custom_model": GNN_PyG,
              "custom_model_config": pyg_config}

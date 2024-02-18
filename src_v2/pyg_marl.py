@@ -34,7 +34,8 @@ class GNN_PyG(TorchModelV2, Module):
         config = model_config["custom_model_config"]
         actor_config = config["actor_config"]
         critic_config = config["critic_config"]
-        self.encoding_size = config["encoding_size"]
+        encoding_config = config["encoding_config"]
+        self.encoding_size = encoding_config["encoding_size"]
         self.recurrent = config["recurrent"]
         self.critic_is_fc = config["critic_config"]["model"] == "fc"
         self.device = torch.device("cuda:0" if config["use_cuda"] else "cpu")
