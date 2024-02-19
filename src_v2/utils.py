@@ -133,7 +133,8 @@ def compute_agent_placement(num_workers: int, communication_range: int,
                     curr_pos = x_old + direction_vector[0] * random.randint(1, max(1, communication_range - 1)), y_old + random.randint(-communication_range+1, communication_range-1)
                 else:
                     curr_pos = x_old + random.randint(-communication_range+1, communication_range-1), y_old + direction_vector[1] * random.randint(1, max(1, communication_range - 1))
-
+            else:
+                curr_pos = random.randint(0, grid_size - 1), random.randint(0, grid_size - 1)
             agent_positions.append(curr_pos)
     
     # check that all agents are in bounds
