@@ -36,7 +36,8 @@ class GNN_PyG(TorchModelV2, Module):
         critic_config = config["critic_config"]
         encoding_config = config["encoding_config"]
         self.encoding_size = encoding_config["encoding_size"]
-        self.recurrent = config["recurrent"]
+        self.recurrent_actor = config["recurrent_actor"]
+        self.recurrent_critic = config["recurrent_critic"]
         self.critic_is_fc = config["critic_config"]["model"] == "fc"
         self.device = torch.device("cuda:0" if config["use_cuda"] else "cpu")
 
@@ -56,11 +57,11 @@ class GNN_PyG(TorchModelV2, Module):
 
         self.node_encoder = self.__build_fc(ins=self.node_state_size, outs=self.encoding_size, hiddens=[], activation=None)
         self.edge_encoder = self.__build_fc(ins=self.edge_state_size, outs=self.encoding_size, hiddens=[], activation=None)
-        self.action_decoder = self.__build_fc(ins=self.encoding_size + self.node_state_size if self.recurrent else self.encoding_size, 
+        self.action_decoder = self.__build_fc(ins=self.encoding_size + self.node_state_size if self.recurrent_actor else self.encoding_size, 
                                        outs=self.out_state_size, 
                                        hiddens=[], 
                                        activation=None)
-        self.value_decoder = self.__build_fc(ins=self.encoding_size, 
+        self.value_decoder = self.__build_fc(ins=self.encoding_size + self.node_state_size if self.recurrent_critic else self.encoding_size, 
                                        outs=1, 
                                        hiddens=[], 
                                        activation=None)
@@ -89,7 +90,8 @@ class GNN_PyG(TorchModelV2, Module):
         print(f"edge state size: ", self.edge_state_size)
         print(f"encoding size: ", self.encoding_size)
         print(f"action size: ", self.out_state_size)
-        print(f"recurrent: ", self.recurrent)
+        print(f"recurrent_actor: ", self.recurrent_actor)
+        print(f"recurrent_critic: ", self.recurrent_critic)
         print(f"device: ", self.device)
         print(f"  cuda_is_available={torch.cuda.is_available()}")
         print(f"  use_cuda={config['use_cuda']}")
@@ -201,13 +203,17 @@ class GNN_PyG(TorchModelV2, Module):
         assert torch.all(actor_batch.batch.eq(critic_batch.batch))
 
         h_all_action = self.actor(x=actor_batch.x, edge_index=actor_batch.edge_index, edge_attr=actor_batch.edge_attr, batch=actor_batch.batch)
-        if self.recurrent:
+        if self.recurrent_actor:
             all_action = self.action_decoder(torch.cat([h_all_action, actor_old_batch.x], dim=1))
         else:
             all_action = self.action_decoder(h_all_action)
 
         h_critic = self.critic(x=critic_batch.x, edge_index=critic_batch.edge_index, edge_attr=critic_batch.edge_attr, batch=critic_batch.batch)
-        all_values = self.value_decoder(h_critic)
+        if self.recurrent_critic:
+            all_values = self.value_decoder(torch.cat([h_critic, actor_old_batch.x], dim=1))
+        else:
+            all_values = self.value_decoder(h_critic)
+            
         
         # which nodes belong to which batch (graph)
         curr_batch = 0

@@ -87,6 +87,8 @@ if __name__ == '__main__':
     pyg_config["actor_config"] = filter_tunables(create_tunable_config(actor_config))
     pyg_config["critic_config"] = create_tunable_config(critic_config)
     pyg_config["encoding_config"] = create_tunable_config(encoding_config)
+    pyg_config["recurrent_actor"] = tune.choice([1, 0])
+    pyg_config["recurrent_critic"] = tune.choice([1, 0])
     pyg_config["recurrent"] = tune.choice([1, 0])
     pyg_config["use_cuda"] = use_cuda
     pyg_config["info"] = {
