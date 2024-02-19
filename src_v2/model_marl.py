@@ -426,33 +426,25 @@ class Moving_Discrete_model(Marl_model):
             lower = -self.n_workers
             upper = self.n_workers
         elif self.reward_calculation == "scn2":
-            f_neighbours = None
-            f_connected = None
-            spread = None
             for worker in self.schedule_workers.agents:
                 dx, dy = get_relative_pos(worker.pos, self.oracle.pos)
 
                 # find neighbours factor
                 neighbors = self.grid.get_neighbors(worker.pos, moore=True, radius=self.communication_range, include_center=True)
-                neighbors = [n for n in neighbors if n != worker]
-                if 0 < len(neighbors) < 3:
-                    f_neighbours = 1
-                elif len(neighbors) >= 3:
-                    f_neighbours = 0.5
-                else:
-                    f_neighbours = 0.2
-                # find connected factor
-                g = self.get_graph()
-                f_connected = 1 if nx.has_path(g, self.oracle.unique_id, worker.unique_id) else 0.5
-                # spread
-                spread = max(abs(dx), abs(dy))
-
+                is_connected = nx.has_path(g, self.oracle.unique_id, worker.unique_id)
+    
                 # reward
                 if worker.output == self.oracle.output:
-                    reward = f_neighbours * f_connected * spread
+                    if 0 < len(neighbors) < 3:
+                        reward = max(abs(dx), abs(dy)) if is_connected else max(abs(dx), abs(dy)) / 10
+                    elif len(neighbors) >= 3:
+                        reward = max(abs(dx), abs(dy)) / 5 * 4 if is_connected else max(abs(dx), abs(dy)) / 10
+                    else:
+                        reward = -0.1
                 else:
-                    reward = 0.2/f_neighbours * 0.5/f_connected * -1
+                    reward = -1
                 rewardss[worker.unique_id] = reward
+            
             lower = -self.n_workers
             upper = 0
             for i in range(self.n_workers):
