@@ -427,6 +427,7 @@ class Moving_Discrete_model(Marl_model):
             upper = self.n_workers
         elif self.reward_calculation == "scn2":
             for worker in self.schedule_workers.agents:
+                g = self.get_graph()
                 dx, dy = get_relative_pos(worker.pos, self.oracle.pos)
 
                 # find neighbours factor
