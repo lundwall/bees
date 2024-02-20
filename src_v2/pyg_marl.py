@@ -14,6 +14,7 @@ from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 from ray.rllib.models.torch.misc import SlimFC
 from gymnasium.spaces import Space
 from gymnasium.spaces.utils import flatdim
+from gnn import GATv2EConv
 from utils import build_graph_v2, get_active_agents
 
 class GNN_PyG(TorchModelV2, Module):
@@ -117,6 +118,8 @@ class GNN_PyG(TorchModelV2, Module):
             return GINEConv(self.__build_fc(ins, outs, [config["hidden_mlp_size"] for _ in range(config["n_hidden_mlp"])]))
         elif config["model"] == "TransformerConv":
             return TransformerConv(ins, outs, edge_dim=edge_dim, dropout=config["dropout"])
+        elif config["model"] == "GATv2EConv":
+            return GATv2EConv(ins, outs, edge_dim=edge_dim)
         else:
             raise NotImplementedError(f"unknown model {config['model']}")  
         
