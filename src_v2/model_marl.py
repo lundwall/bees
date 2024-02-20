@@ -25,17 +25,26 @@ def get_model_by_config(config: str):
                     "env_config_10.yaml",
                     "env_config_11.yaml",
                     "env_config_12.yaml",
-                ]:
-        return Marl_model
+                ]: return Marl_model
     elif config in [
                     "env_config_13.yaml",
-                ]:
-        return Relstate_Model
+                ]: return Relstate_Model
     elif config in [
                     "env_config_14.yaml",
                     "env_config_15.yaml",
-                ]:
-        return Moving_model
+                    "env_config_16.yaml",
+                ]: return Moving_Discrete_model
+    elif config in [
+                    "env_config_17.yaml",
+                    "env_config_18.yaml",
+                    "env_config_19.yaml",
+                    "env_config_20.yaml",
+                    "env_config_21.yaml",
+                    "env_config_22.yaml",
+                    "env_config_23.yaml",
+                    "env_config_24.yaml",
+                    "env_config_25.yaml",
+                ]: return Moving_History_model
 
 class Marl_model(mesa.Model):
     """
@@ -101,7 +110,7 @@ class Marl_model(mesa.Model):
         self.grid.place_agent(agent=self.oracle, pos=oracle_pos)
         self.schedule_all.add(self.oracle)
         agent_positions = compute_agent_placement(self.n_workers, self.communication_range, 
-                                                  self.grid_size, self.grid_size, 
+                                                  self.grid_size, 
                                                   oracle_pos, self.worker_placement)
         for i, curr_pos in enumerate(agent_positions):
             worker = Worker(unique_id=self._next_id(), 
@@ -249,7 +258,6 @@ class Marl_model(mesa.Model):
             actions = dict()
             obss = self.get_obss()
 
-            # @todo: sample for every agent
             if self.policy_net:
                 for worker in self.schedule_workers.agents:
                     actions[worker.unique_id] = self.policy_net.compute_single_action(obss[worker.unique_id])
@@ -347,13 +355,14 @@ class Relstate_Model(Marl_model):
             for destination in neighbors:
                 print(f"    edge {worker.unique_id}->{destination.unique_id}: {self._get_edge_state(from_agent=worker, to_agent=destination, visible_edge=1)}")
         print()
-        
-class Moving_model(Relstate_Model):
+
+
+class Moving_Discrete_model(Marl_model):
     def get_action_space(self) -> gymnasium.spaces.Space:
         return Tuple([
             Discrete(self.n_oracle_states),                             # output
             Box(0, 1, shape=(self.n_hidden_states,), dtype=np.float32), # hidden state
-            Box(-1, 1, shape=(2,), dtype=np.float32),                   # movement x,y
+            Box(-1, 1, shape=(2,), dtype=np.int32),                   # movement x,y
         ]) 
     
     def _apply_action(self, agent: BaseAgent, action):
@@ -367,7 +376,7 @@ class Moving_model(Relstate_Model):
         self.grid.move_agent(agent=agent, pos=(x,y))
 
     def _compute_reward(self):
-        assert self.reward_calculation in {"spread", "spread-connected"}
+        assert self.reward_calculation in {"spread", "spread-connected", "2-neighbours", "scn2"}
 
         # compute reward
         rewardss = {}
@@ -377,16 +386,133 @@ class Moving_model(Relstate_Model):
                 dx, dy = get_relative_pos(worker.pos, self.oracle.pos)
                 rewardss[worker.unique_id] = max(abs(dx), abs(dy)) if worker.output == self.oracle.output else -1
             
+            lower = -self.n_workers
+            upper = 0
+            for i in range(self.n_workers):
+                upper += min((i+1) * self.communication_range, self.grid_middle)
+            
         elif self.reward_calculation == "spread-connected":
             g = self.get_graph()
             for worker in self.schedule_workers.agents:
                 dx, dy = get_relative_pos(worker.pos, self.oracle.pos)
-                rewardss[worker.unique_id] = max(abs(dx), abs(dy)) if worker.output == self.oracle.output and nx.has_path(g, self.oracle.unique_id, worker.unique_id) else -1
+                if worker.output == self.oracle.output:
+                    rewardss[worker.unique_id] = max(abs(dx), abs(dy)) * (1 if nx.has_path(g, self.oracle.unique_id, worker.unique_id) else 0.5)
+                else:
+                    rewardss[worker.unique_id] = -1 * (0.5 if nx.has_path(g, self.oracle.unique_id, worker.unique_id) else 1)
 
-        lower = -self.n_workers
-        upper = 0
-        for i in range(self.n_workers):
-            upper += min((i+1) * self.communication_range, self.grid_middle)
+            lower = -self.n_workers
+            upper = 0
+            for i in range(self.n_workers):
+                upper += min((i+1) * self.communication_range, self.grid_middle)
+
+        elif self.reward_calculation == "2-neighbours":
+            for worker in self.schedule_workers.agents:
+                neighbors = self.grid.get_neighbors(worker.pos, moore=True, radius=self.communication_range, include_center=True)
+                neighbors = [n for n in neighbors if n != worker]
+
+                if worker.output == self.oracle.output:
+                    if 0 < len(neighbors) < 3:
+                        reward = 1
+                    elif len(neighbors) >= 3:
+                        reward = 0.5
+                    else:
+                        reward = 0.1
+                else:
+                    if 0 < len(neighbors) < 3:
+                        reward = -0.2
+                    elif len(neighbors) >= 3:
+                        reward = -0.5
+                    else:
+                        reward = -1
+                rewardss[worker.unique_id] = reward
             
+            lower = -self.n_workers
+            upper = self.n_workers
+        elif self.reward_calculation == "scn2":
+            for worker in self.schedule_workers.agents:
+                g = self.get_graph()
+                dx, dy = get_relative_pos(worker.pos, self.oracle.pos)
 
+                # find neighbours factor
+                neighbors = self.grid.get_neighbors(worker.pos, moore=True, radius=self.communication_range, include_center=True)
+                is_connected = nx.has_path(g, self.oracle.unique_id, worker.unique_id)
+    
+                # reward
+                if worker.output == self.oracle.output:
+                    if 0 < len(neighbors) < 3:
+                        reward = max(abs(dx), abs(dy)) if is_connected else max(abs(dx), abs(dy)) / 10
+                    elif len(neighbors) >= 3:
+                        reward = max(abs(dx), abs(dy)) / 5 * 4 if is_connected else max(abs(dx), abs(dy)) / 10
+                    else:
+                        reward = -0.1
+                else:
+                    reward = -1
+                rewardss[worker.unique_id] = reward
+            
+            lower = -self.n_workers
+            upper = 0
+            for i in range(self.n_workers):
+                upper += min((i+1) * self.communication_range, self.grid_middle)
+
+            
         return rewardss, upper, lower, n_wrongs
+
+class Moving_History_model(Moving_Discrete_model):
+
+    def __init__(self, config: dict, use_cuda: bool = False, policy_net: Algorithm = None, inference_mode: bool = False) -> None:
+        super().__init__(config, use_cuda, policy_net, inference_mode)
+        self.history_length = 3
+        self.history = {w.unique_id: [[np.array(get_relative_pos(w.pos, self.oracle.pos)), np.array([0,0])] for _ in range(self.history_length)] 
+                        for w in self.schedule_all.agents}
+    
+    def _get_agent_state_space(self) -> gymnasium.spaces.Space:
+        history = [Box(-MAX_DISTANCE, MAX_DISTANCE, shape=(2,), dtype=np.float32)]
+        for _ in range(self.history_length):
+            history.append(Box(-MAX_DISTANCE, MAX_DISTANCE, shape=(2,), dtype=np.float32))
+            history.append(Box(-1, 1, shape=(2,), dtype=np.int32))
+
+        return Tuple([
+            Discrete(2),                                                    # active flag
+            Discrete(3),                                                    # agent type
+            Discrete(self.n_oracle_states),                                 # current output
+            Box(0, 1, shape=(self.n_hidden_states,), dtype=np.float32)]     # hidden state                               
+            + history)
+    
+    def _apply_action(self, agent: BaseAgent, action):
+        # update history
+        h = self.history[agent.unique_id]
+        h.insert(0, [np.array(get_relative_pos(agent.pos, self.oracle.pos)), action[2]])
+        if len(h) > self.history_length: h.pop()
+        
+        # apply action
+        super()._apply_action(agent=agent, action=action)
+
+    
+    def _get_agent_state(self, agent: BaseAgent, activity_status: int):
+        """compute agent state"""
+        history = [np.array(get_relative_pos(agent.pos, self.oracle.pos))]
+        for ht in self.history[agent.unique_id]:
+            pos, a = ht
+            history.append(pos)
+            history.append(a)
+        return tuple([
+            activity_status,
+            TYPE_ORACLE if type(agent) is Oracle else TYPE_WORKER, 
+            agent.output,
+            agent.hidden_state]
+            + history)
+
+    def _print_model_specific(self):
+            print("positional history")
+            print("------------------")
+            hist = [[] for _ in range(4)]
+            for agent in self.schedule_workers.agents:
+                for j, h in enumerate(self.history[agent.unique_id]):
+                    hist[j].append(str(h[0]) + " " + str(h[1]))
+            
+            print("\t\t\t".join(["agent " + str(w.unique_id) for w in self.schedule_workers.agents]))
+            print("\t\t".join(["pos|action " for _ in self.schedule_workers.agents]))
+            for ht in hist:
+                print("\t\t".join(ht))
+            
+            print()

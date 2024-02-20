@@ -8,11 +8,13 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.nn.conv.gin_conv import GINEConv
 from torch_geometric.nn.conv.gat_conv import GATConv
 from torch_geometric.nn.conv.gatv2_conv import GATv2Conv
+from torch_geometric.nn.conv.transformer_conv import TransformerConv
 from torch_geometric.nn import Sequential as PyG_Sequential, global_mean_pool
 from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
 from ray.rllib.models.torch.misc import SlimFC
 from gymnasium.spaces import Space
 from gymnasium.spaces.utils import flatdim
+from gnn import GATv2EConv
 from utils import build_graph_v2, get_active_agents
 
 class GNN_PyG(TorchModelV2, Module):
@@ -33,8 +35,10 @@ class GNN_PyG(TorchModelV2, Module):
         config = model_config["custom_model_config"]
         actor_config = config["actor_config"]
         critic_config = config["critic_config"]
-        self.encoding_size = config["encoding_size"]
-        self.recurrent = config["recurrent"]
+        encoding_config = config["encoding_config"]
+        self.encoding_size = encoding_config["encoding_size"]
+        self.recurrent_actor = config["recurrent_actor"]
+        self.recurrent_critic = config["recurrent_critic"]
         self.critic_is_fc = config["critic_config"]["model"] == "fc"
         self.device = torch.device("cuda:0" if config["use_cuda"] else "cpu")
 
@@ -54,11 +58,11 @@ class GNN_PyG(TorchModelV2, Module):
 
         self.node_encoder = self.__build_fc(ins=self.node_state_size, outs=self.encoding_size, hiddens=[], activation=None)
         self.edge_encoder = self.__build_fc(ins=self.edge_state_size, outs=self.encoding_size, hiddens=[], activation=None)
-        self.action_decoder = self.__build_fc(ins=self.encoding_size + self.node_state_size if self.recurrent else self.encoding_size, 
+        self.action_decoder = self.__build_fc(ins=self.encoding_size + self.node_state_size if self.recurrent_actor else self.encoding_size, 
                                        outs=self.out_state_size, 
                                        hiddens=[], 
                                        activation=None)
-        self.value_decoder = self.__build_fc(ins=self.encoding_size, 
+        self.value_decoder = self.__build_fc(ins=self.encoding_size + self.node_state_size if self.recurrent_critic else self.encoding_size, 
                                        outs=1, 
                                        hiddens=[], 
                                        activation=None)
@@ -87,7 +91,8 @@ class GNN_PyG(TorchModelV2, Module):
         print(f"edge state size: ", self.edge_state_size)
         print(f"encoding size: ", self.encoding_size)
         print(f"action size: ", self.out_state_size)
-        print(f"recurrent: ", self.recurrent)
+        print(f"recurrent_actor: ", self.recurrent_actor)
+        print(f"recurrent_critic: ", self.recurrent_critic)
         print(f"device: ", self.device)
         print(f"  cuda_is_available={torch.cuda.is_available()}")
         print(f"  use_cuda={config['use_cuda']}")
@@ -111,6 +116,10 @@ class GNN_PyG(TorchModelV2, Module):
             return GATv2Conv(ins, outs, edge_dim=edge_dim, dropout=config["dropout"])
         elif config["model"] == "GINEConv":
             return GINEConv(self.__build_fc(ins, outs, [config["hidden_mlp_size"] for _ in range(config["n_hidden_mlp"])]))
+        elif config["model"] == "TransformerConv":
+            return TransformerConv(ins, outs, edge_dim=edge_dim, dropout=config["dropout"])
+        elif config["model"] == "GATv2EConv":
+            return GATv2EConv(ins, outs, edge_dim=edge_dim)
         else:
             raise NotImplementedError(f"unknown model {config['model']}")  
         
@@ -139,7 +148,7 @@ class GNN_PyG(TorchModelV2, Module):
     def value_function(self):
         return torch.reshape(self.last_values, [-1])
     
-    def forward(self, input_dict: Dict[str, TensorType], state: List[TensorType], seq_lens: TensorType) -> (TensorType, List[TensorType]):
+    def forward(self, input_dict: Dict[str, TensorType], state: List[TensorType], seq_lens: TensorType):
         """
         extract the node info from the flat observation to create an X tensor
         extract the adjacency relations to create the edge_indexes
@@ -197,13 +206,17 @@ class GNN_PyG(TorchModelV2, Module):
         assert torch.all(actor_batch.batch.eq(critic_batch.batch))
 
         h_all_action = self.actor(x=actor_batch.x, edge_index=actor_batch.edge_index, edge_attr=actor_batch.edge_attr, batch=actor_batch.batch)
-        if self.recurrent:
+        if self.recurrent_actor:
             all_action = self.action_decoder(torch.cat([h_all_action, actor_old_batch.x], dim=1))
         else:
             all_action = self.action_decoder(h_all_action)
 
         h_critic = self.critic(x=critic_batch.x, edge_index=critic_batch.edge_index, edge_attr=critic_batch.edge_attr, batch=critic_batch.batch)
-        all_values = self.value_decoder(h_critic)
+        if self.recurrent_critic:
+            all_values = self.value_decoder(torch.cat([h_critic, actor_old_batch.x], dim=1))
+        else:
+            all_values = self.value_decoder(h_critic)
+            
         
         # which nodes belong to which batch (graph)
         curr_batch = 0

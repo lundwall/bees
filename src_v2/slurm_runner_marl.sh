@@ -50,6 +50,7 @@ cd ${PROJECT_DIR}
 ENV_CONFIG=""
 ACTOR_CONFIG="model_GINE.yaml"
 CRITIC_CONFIG="model_GATv2.yaml"
+ENCODING_CONFIG="encoding_s.yaml"
 NUM_RAY_THREADS=36
 NUM_CPU_LOCAL_WORKER=2 
 NUM_ROLLOUTS=0 
@@ -82,6 +83,15 @@ while [[ $# -gt 0 ]]; do
         shift 2
       else
         echo "Error: Missing value for -critic_config flag."
+        exit 1
+      fi
+      ;;
+    --encoding_config)
+      if [[ -n $2 ]]; then
+        ENCODING_CONFIG=$2
+        shift 2
+      else
+        echo "Error: Missing value for -encoding_config flag."
         exit 1
       fi
       ;;
@@ -145,6 +155,7 @@ echo "-> user parameters:"
 echo "    ENV_CONFIG              = $ENV_CONFIG"
 echo "    ACTOR_CONFIG            = $ACTOR_CONFIG"
 echo "    CRITIC_CONFIG           = $CRITIC_CONFIG"
+echo "    ENCODING_CONFIG         = $ENCODING_CONFIG"
 echo "    NUM_RAY_THREADS         = $NUM_RAY_THREADS"
 echo "    NUM_CPU_LOCAL_WORKER    = $NUM_CPU_LOCAL_WORKER"
 echo "    NUM_ROLLOUTS            = $NUM_ROLLOUTS"
@@ -154,7 +165,7 @@ echo "    FLAGS                   = $FLAGS"
 
 # Binary or script to execute
 echo "-> run train.py from directory $(pwd)"
-python $RUN_DIR/$SRC_DIR/train_marl.py --env_config $ENV_CONFIG --actor_config $ACTOR_CONFIG --critic_config $CRITIC_CONFIG --num_ray_threads $NUM_RAY_THREADS $FLAGS --num_cpu_for_local $NUM_CPU_LOCAL_WORKER --num_rollouts $NUM_ROLLOUTS --num_gpu_shares $NUM_GPU_SHARES
+python $RUN_DIR/$SRC_DIR/train_marl.py --env_config $ENV_CONFIG --actor_config $ACTOR_CONFIG --critic_config $CRITIC_CONFIG --encoding_config $ENCODING_CONFIG --num_ray_threads $NUM_RAY_THREADS $FLAGS --num_cpu_for_local $NUM_CPU_LOCAL_WORKER --num_rollouts $NUM_ROLLOUTS --num_gpu_shares $NUM_GPU_SHARES
 
 # Send more noteworthy information to the output log
 echo "Finished at:     $(date)"
