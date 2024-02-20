@@ -1,7 +1,7 @@
 task_0:    
     model:
       n_workers: 4
-      n_hidden_state: 16
+      n_hidden_state: 32
       communication_range: 2
       worker_placement: "random_multidirectional"
       worker_init: "random"
@@ -13,7 +13,7 @@ task_0:
 task_1:    
     model:
       n_workers: 4
-      n_hidden_state: 16
+      n_hidden_state: 32
       communication_range: 2
       worker_placement: "random"
       worker_init: "random"
@@ -25,7 +25,7 @@ task_1:
 task_2:    
     model:
       n_workers: 4
-      n_hidden_state: 16
+      n_hidden_state: 32
       communication_range: 2
       worker_placement: "random_multidirectional"
       worker_init: "random"
@@ -37,7 +37,7 @@ task_2:
 task_3:    
     model:
       n_workers: 4
-      n_hidden_state: 16
+      n_hidden_state: 32
       communication_range: 2
       worker_placement: "random"
       worker_init: "random"
@@ -49,7 +49,7 @@ task_3:
 task_4:    
     model:
       n_workers: 4
-      n_hidden_state: 16
+      n_hidden_state: 32
       communication_range: 2
       worker_placement: "random_multidirectional"
       worker_init: "random"
@@ -61,7 +61,7 @@ task_4:
 task_5:    
     model:
       n_workers: 4
-      n_hidden_state: 16
+      n_hidden_state: 32
       communication_range: 2
       worker_placement: "random"
       worker_init: "random"
@@ -73,7 +73,7 @@ task_5:
 task_6:    
     model:
       n_workers: 4
-      n_hidden_state: 16
+      n_hidden_state: 32
       communication_range: 2
       worker_placement: "random"
       worker_init: "random"
