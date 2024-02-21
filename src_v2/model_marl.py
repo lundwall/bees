@@ -381,7 +381,7 @@ class Moving_Discrete_model(Marl_model):
         self.grid.move_agent(agent=agent, pos=(x,y))
 
     def _compute_reward(self):
-        assert self.reward_calculation in {"spread", "spread-connected", "2-neighbours", "scn2"}
+        assert self.reward_calculation in {"spread", "spread-connected", "2-neighbours", "scn2", "graph-validation"}
 
         # compute reward
         rewardss = {}
