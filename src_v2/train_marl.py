@@ -79,10 +79,7 @@ if __name__ == '__main__':
 
     tune.register_env("Marl_env", lambda env_config: Marl_env(config=env_config, env_config_file=args.env_config))
     
-    if type(get_model_by_config(args.env_config)) is Marl_Lever_Pulling:
-        run_name = f"marl-lever-{datetime.now().strftime('%Y%m-%d-%H-%M%S')}"
-    else:
-        run_name = f"marl-env-{datetime.now().strftime('%Y%m-%d-%H-%M%S')}"
+    run_name = f"marl-env-{datetime.now().strftime('%Y%m-%d-%H-%M%S')}"
     env_config = read_yaml_config(os.path.join("src_v2", "configs", args.env_config))
     actor_config = read_yaml_config(os.path.join("src_v2", "configs", args.actor_config))
     critic_config = read_yaml_config(os.path.join("src_v2", "configs", args.critic_config))
