@@ -1,4 +1,4 @@
 task_0:
     model:
-      not_fail: 1
+      grid_size: 1
       

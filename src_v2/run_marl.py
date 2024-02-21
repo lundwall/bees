@@ -58,7 +58,7 @@ def create_server(model_checkpoint: str, env_config_path: str, env_config: str, 
 
     server = ModularServer(
         model, 
-        [canvas, game_state], 
+        [canvas], 
         "swarm intelligence with graph networks", 
         model_params={
             "config": task_config,
