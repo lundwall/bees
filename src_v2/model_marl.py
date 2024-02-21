@@ -45,6 +45,7 @@ def get_model_by_config(config: str):
                     "env_config_23.yaml",
                     "env_config_24.yaml",
                     "env_config_25.yaml",
+                    "env_config_graph.yaml",
                 ]: return Moving_History_model
     elif config in [
         "env_config_lever.yaml",
