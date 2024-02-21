@@ -10,6 +10,7 @@ import gymnasium
 from gymnasium.spaces import Box, Tuple, Discrete
 import torch
 from agents_marl import BaseAgent, Oracle, Worker
+from model_marl_validation import Marl_Lever_Pulling
 
 from utils import compute_agent_placement, get_relative_pos
 
@@ -45,6 +46,9 @@ def get_model_by_config(config: str):
                     "env_config_24.yaml",
                     "env_config_25.yaml",
                 ]: return Moving_History_model
+    elif config in [
+        "env_config_lever.yaml",
+    ]: return Marl_Lever_Pulling
 
 class Marl_model(mesa.Model):
     """

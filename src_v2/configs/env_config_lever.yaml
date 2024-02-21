@@ -1,0 +1,4 @@
+task_0:
+    model:
+      not_fail: 1
+      

@@ -5,6 +5,8 @@ import time
 
 from model import MODEL_TYPE_SIMPLE, MODEL_TYPE_MOVING, MOVING_MODELS, SIMPLE_MODELS
 from environment_marl import Marl_env
+from model_marl import get_model_by_config
+from model_marl_validation import Marl_Lever_Pulling
 
 if platform.system() == "Darwin":
     pass
@@ -66,7 +68,7 @@ if __name__ == '__main__':
     if args.local:
         print(f"-> using local")
         #ray.init()
-        ray.init(num_cpus=4, local_mode=False)
+        ray.init(num_cpus=4, local_mode=True)
     elif use_cuda:
         # @todo: investigate gpu utilisation
         print(f"-> using {int(args.num_ray_threads)} cpus and a gpu ({os.environ['CUDA_VISIBLE_DEVICES']})")
@@ -77,7 +79,10 @@ if __name__ == '__main__':
 
     tune.register_env("Marl_env", lambda env_config: Marl_env(config=env_config, env_config_file=args.env_config))
     
-    run_name = f"marl-env-{datetime.now().strftime('%Y%m-%d-%H-%M%S')}"
+    if type(get_model_by_config(args.env_config)) is Marl_Lever_Pulling:
+        run_name = f"marl-lever-{datetime.now().strftime('%Y%m-%d-%H-%M%S')}"
+    else:
+        run_name = f"marl-env-{datetime.now().strftime('%Y%m-%d-%H-%M%S')}"
     env_config = read_yaml_config(os.path.join("src_v2", "configs", args.env_config))
     actor_config = read_yaml_config(os.path.join("src_v2", "configs", args.actor_config))
     critic_config = read_yaml_config(os.path.join("src_v2", "configs", args.critic_config))
