@@ -366,7 +366,7 @@ class Moving_Discrete_model(Marl_model):
         return Tuple([
             Discrete(self.n_oracle_states),                             # output
             Box(0, 1, shape=(self.n_hidden_states,), dtype=np.float32), # hidden state
-            Box(-1, 1, shape=(2,), dtype=np.int32),                   # movement x,y
+            Box(-1, 1, shape=(2,), dtype=np.int32),                     # movement x,y
         ]) 
     
     def _apply_action(self, agent: BaseAgent, action):
@@ -439,6 +439,7 @@ class Moving_Discrete_model(Marl_model):
 
                 # find neighbours factor
                 neighbors = self.grid.get_neighbors(worker.pos, moore=True, radius=self.communication_range, include_center=True)
+                neighbors = [n for n in neighbors if n != worker]
                 is_connected = nx.has_path(g, self.oracle.unique_id, worker.unique_id)
     
                 # reward
@@ -457,9 +458,30 @@ class Moving_Discrete_model(Marl_model):
             upper = 0
             for i in range(self.n_workers):
                 upper += min((i+1) * self.communication_range, self.grid_middle)
+        elif self.reward_calculation == "graph-validation":
+            reward = 0
+            lower = 0
+            upper = 0
+            for worker in self.schedule_workers.agents:
+                # find neighbours factor
+                neighbors = self.grid.get_neighbors(worker.pos, moore=True, radius=self.communication_range, include_center=True)
+                neighbors = [n for n in neighbors if n != worker]
+    
+                for n in neighbors:
+                    dx, dy = get_relative_pos(worker.pos, n.pos)
+                    dist = max(abs(dx), abs(dy))
+                    if dist < 3:
+                        reward += -2.5
+                    else:
+                        reward += 0.5
 
+                    upper += 0.5
+                    lower += -2.5
+
+            for worker in self.schedule_workers.agents:
+                rewardss[worker.unique_id] = reward
             
-        return rewardss, upper, lower, n_wrongs
+        return rewardss, upper, lower, 0
 
 class Moving_History_model(Moving_Discrete_model):
 
