@@ -45,6 +45,7 @@ def get_model_by_config(config: str):
                     "env_config_23.yaml",
                     "env_config_24.yaml",
                     "env_config_25.yaml",
+                    "env_config_26.yaml",
                     "env_config_graph.yaml",
                 ]: return Moving_History_model
     elif config in [
@@ -381,7 +382,7 @@ class Moving_Discrete_model(Marl_model):
         self.grid.move_agent(agent=agent, pos=(x,y))
 
     def _compute_reward(self):
-        assert self.reward_calculation in {"spread", "spread-connected", "2-neighbours", "scn2", "graph-validation"}
+        assert self.reward_calculation in {"spread", "spread-connected", "2-neighbours", "scn2", "scn3", "graph-validation"}
 
         # compute reward
         rewardss = {}
@@ -459,6 +460,31 @@ class Moving_Discrete_model(Marl_model):
             upper = 0
             for i in range(self.n_workers):
                 upper += min((i+1) * self.communication_range, self.grid_middle)
+        elif self.reward_calculation == "scn3":
+            for worker in self.schedule_workers.agents:
+                g = self.get_graph()
+                dx, dy = get_relative_pos(worker.pos, self.oracle.pos)
+
+                # find neighbours factor
+                neighbors = self.grid.get_neighbors(worker.pos, moore=True, radius=self.communication_range, include_center=True)
+                neighbors = [n for n in neighbors if n != worker]
+                is_connected = nx.has_path(g, self.oracle.unique_id, worker.unique_id)
+    
+                # reward
+                if worker.output == self.oracle.output:
+                    if 0 < len(neighbors) < 3:
+                        reward = max(abs(dx), abs(dy)) if is_connected else max(abs(dx), abs(dy)) / 10
+                    elif len(neighbors) >= 3:
+                        reward = max(abs(dx), abs(dy)) / 5 * 4 if is_connected else max(abs(dx), abs(dy)) / 10
+                    else:
+                        reward = -0.1
+                else:
+                    reward = -1
+                rewardss[worker.unique_id] = reward
+            
+            lower = -self.n_workers
+            upper = self.n_workers * self.grid_middle / 2
+
         elif self.reward_calculation == "graph-validation":
             reward = 0
             lower = 0
