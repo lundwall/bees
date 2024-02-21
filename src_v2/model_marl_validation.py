@@ -33,8 +33,8 @@ class Marl_Lever_Pulling():
     def get_obs_space(self) -> gymnasium.spaces.Space:
         graph_state = Box(0, int(GRAPH_HASH), shape=(1,), dtype=np.float32) # current step hash
         agent_states = Tuple([Tuple([
-            Discrete(2),                            # active flag
-            Discrete(self.agent_id_max)      # lever to pull
+            Discrete(2),                     # active flag
+            Discrete(self.agent_id_max)      # agent id
         ]) for _ in range(self.n_agents)])
         edge_states = Tuple([Tuple([
             Discrete(2),                            # exists flag
@@ -45,14 +45,16 @@ class Marl_Lever_Pulling():
     
     def get_obss(self):
         step_hash = np.array([random.randint(0, GRAPH_HASH)])
-        agent_states = [tuple([0, random.randint(0, self.agent_id_max - 1)]) for _ in range(self.n_agents)]
+        agent_ids = [random.randint(0, self.agent_id_max - 1) for _ in range(self.n_agents)]
+        agent_states = [tuple([0, agent_ids[i]]) for i in range(self.n_agents)]
         edge_states = [tuple([1, np.array([0,0])]) for _ in range(self.n_agents ** 2)]
         
         obss = dict()
         for i in range(self.n_agents):
             curr_agent_state = agent_states.copy()
-            curr_agent_state[i] = tuple([1, random.randint(0, self.agent_id_max - 1)])
+            curr_agent_state[i] = tuple([1, agent_ids[i]])
             obss[i] = tuple([step_hash, tuple(curr_agent_state), tuple(edge_states)])
+            print(obss[i])
         return obss
     
     def step(self, actions=None):
@@ -61,7 +63,6 @@ class Marl_Lever_Pulling():
         if self.inference_mode:
             actions = dict()
             obss = self.get_obss()
-
             if self.policy_net:
                 for i in range(self.n_agents):
                     actions[i] = self.policy_net.compute_single_action(obss[i])
