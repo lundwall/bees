@@ -10,6 +10,7 @@ import gymnasium
 from gymnasium.spaces import Box, Tuple, Discrete
 import torch
 from agents_marl import BaseAgent, Oracle, Worker
+from model_marl_validation import Marl_Lever_Pulling
 
 from utils import compute_agent_placement, get_relative_pos
 
@@ -44,7 +45,11 @@ def get_model_by_config(config: str):
                     "env_config_23.yaml",
                     "env_config_24.yaml",
                     "env_config_25.yaml",
+                    "env_config_graph.yaml",
                 ]: return Moving_History_model
+    elif config in [
+        "env_config_lever.yaml",
+    ]: return Marl_Lever_Pulling
 
 class Marl_model(mesa.Model):
     """
@@ -362,7 +367,7 @@ class Moving_Discrete_model(Marl_model):
         return Tuple([
             Discrete(self.n_oracle_states),                             # output
             Box(0, 1, shape=(self.n_hidden_states,), dtype=np.float32), # hidden state
-            Box(-1, 1, shape=(2,), dtype=np.int32),                   # movement x,y
+            Box(-1, 1, shape=(2,), dtype=np.int32),                     # movement x,y
         ]) 
     
     def _apply_action(self, agent: BaseAgent, action):
@@ -376,7 +381,7 @@ class Moving_Discrete_model(Marl_model):
         self.grid.move_agent(agent=agent, pos=(x,y))
 
     def _compute_reward(self):
-        assert self.reward_calculation in {"spread", "spread-connected", "2-neighbours", "scn2"}
+        assert self.reward_calculation in {"spread", "spread-connected", "2-neighbours", "scn2", "graph-validation"}
 
         # compute reward
         rewardss = {}
@@ -435,6 +440,7 @@ class Moving_Discrete_model(Marl_model):
 
                 # find neighbours factor
                 neighbors = self.grid.get_neighbors(worker.pos, moore=True, radius=self.communication_range, include_center=True)
+                neighbors = [n for n in neighbors if n != worker]
                 is_connected = nx.has_path(g, self.oracle.unique_id, worker.unique_id)
     
                 # reward
@@ -453,7 +459,29 @@ class Moving_Discrete_model(Marl_model):
             upper = 0
             for i in range(self.n_workers):
                 upper += min((i+1) * self.communication_range, self.grid_middle)
+        elif self.reward_calculation == "graph-validation":
+            reward = 0
+            lower = 0
+            upper = 0
+            m_wrongs = 0
+            for worker in self.schedule_workers.agents:
+                # find neighbours factor
+                neighbors = self.grid.get_neighbors(worker.pos, moore=True, radius=self.communication_range, include_center=True)
+                neighbors = [n for n in neighbors if n != worker]
+    
+                for n in neighbors:
+                    dx, dy = get_relative_pos(worker.pos, n.pos)
+                    dist = max(abs(dx), abs(dy))
+                    if dist < 3:
+                        reward += -2.5
+                    else:
+                        reward += 0.5
 
+                    upper += 0.5 * self.n_workers
+                    lower += -2.5 * self.n_workers
+
+            for worker in self.schedule_workers.agents:
+                rewardss[worker.unique_id] = reward
             
         return rewardss, upper, lower, n_wrongs
 

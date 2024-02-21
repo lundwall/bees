@@ -5,6 +5,8 @@ import time
 
 from model import MODEL_TYPE_SIMPLE, MODEL_TYPE_MOVING, MOVING_MODELS, SIMPLE_MODELS
 from environment_marl import Marl_env
+from model_marl import get_model_by_config
+from model_marl_validation import Marl_Lever_Pulling
 
 if platform.system() == "Darwin":
     pass
@@ -66,7 +68,7 @@ if __name__ == '__main__':
     if args.local:
         print(f"-> using local")
         #ray.init()
-        ray.init(num_cpus=4, local_mode=False)
+        ray.init(num_cpus=4, local_mode=True)
     elif use_cuda:
         # @todo: investigate gpu utilisation
         print(f"-> using {int(args.num_ray_threads)} cpus and a gpu ({os.environ['CUDA_VISIBLE_DEVICES']})")
